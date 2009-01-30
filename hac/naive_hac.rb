@@ -32,7 +32,7 @@ class Similarity
 end
 
 
-data = open(ARGV[0] || 'corpus'){|f| Marshal.load(f.read) }
+data = open(ARGV[0] || 'corpus'){|f| Marshal.load(f) }
 docs = data[:docs]
 terms = data[:terms]
 
