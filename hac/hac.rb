@@ -1,6 +1,6 @@
 #!/usr/bin/ruby
 
-DEBUG = true
+DEBUG = false
 
 # tf-idf
 def calc_tdidf(tf, df, n_docs)
