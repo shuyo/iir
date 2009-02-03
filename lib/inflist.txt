@@ -1,0 +1,4 @@
+women	woman
+feet	foot
+gentlemen	gentleman
+policemen	policeman
