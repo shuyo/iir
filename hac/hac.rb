@@ -227,6 +227,7 @@ def pq_hac(docs)
       pqueue[t].delete_if_3rd(d2)
       v = yield sim, clusters, d, d1, d2
       puts "  #{[d1[:title], t, v].inspect}" if DEBUG
+      sim[d[:title], d1[:title]] = v
       pqueue[t].insert( [v, d, d1] )
       pqueue[t1].insert( [v, d1, d] )
     end
