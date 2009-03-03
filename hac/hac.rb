@@ -121,8 +121,8 @@ docs = data[:docs]
 terms = data[:terms]
 
 # TODO: feature selection
-#axes = terms.keys # all terms
-axes = terms.keys.select{|term| n=terms[term].size; n>1 && n<docs.size } # 2`n_docs-1
+axes = terms.keys # all terms
+#axes = terms.keys.select{|term| n=terms[term].size; n>1 && n<docs.size } # 2`n_docs-1
 
 # “Á’¥ƒxƒNƒgƒ‹‚ÌŒvŽZ
 docs.each_with_index do |doc, doc_id|
