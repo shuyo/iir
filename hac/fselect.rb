@@ -1,5 +1,6 @@
 #!/usr/bin/ruby
 # feature selection
+# (cf. "Feature Selection and Document Clustering" http://www.csee.umbc.edu/cadip/2002Symposium/kogan.pdf )
 
 require '../lib/infinitive.rb'
 INF = Infinitive.new
@@ -8,7 +9,7 @@ require 'optparse'
 opt = {:n_words=>1000, :type=>:q0, :stopwords=>true}
 parser = OptionParser.new
 parser.on('-n [VAL]', Integer) {|v| opt[:n_words] = v }
-parser.on('-t [VAL]', [:q0, :q1, :qp]) {|v| opt[:type] = v }
+parser.on('-t [VAL]', [:q0, :q1]) {|v| opt[:type] = v }
 parser.on('-s', 'exclude stop words') {|v| opt[:stopwords] = false }
 parser.parse!(ARGV)
 
@@ -82,4 +83,4 @@ open("#{filename}.#{opt[:type]}", "w") do |f|
 end
 
 puts "#{terms.size} => #{new_terms.size}"
-puts ev.map{|x| x[0]}.join(' ')
+#puts ev.map{|x| x[0]}.join(' ')
