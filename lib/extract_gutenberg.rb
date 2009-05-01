@@ -7,7 +7,7 @@ def self.extract(text)
   $stderr.puts "Warning: HTML tag in #{path}"if text.gsub!(/<HTML>.+?<\/HTML>/mi, "")
 
   negative_phrase = /http|internet|project gutenberg|mail|ocr/i
-  separator = /^(?:.+?END\*{1,2}|\*{3} START OF THE PROJECT GUTENBERG E(?:BOOK|TEXT).*? \*{3}|\*{9}END OF .+?|\*{3} END OF THE PROJECT GUTENBERG E(?:BOOK|TEXT).+?|\*{3}START\*.+\*START\*{3}|\**This file should be named .+|\*{5}These [eE](?:Books|texts) (?:Are|Were) Prepared By .+\*{5})$/
+  separator = /^(?:.+?END\*{1,2}|\*{3} START OF THE PROJECT GUTENBERG E(?:BOOK|TEXT).*? \*{3}|\*{9}END OF .+?|\*{3} END OF THE PROJECT GUTENBERG E(?:BOOK|TEXT).+?|\*{3}START\*.+\*START\*{3}|\**\s*This file should be named .+|\*{5}These [eE](?:Books|texts) (?:Are|Were) Prepared By .+\*{5})$/
 
 	while text =~ separator
 	  pre, post = $`, $'
