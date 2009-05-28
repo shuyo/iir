@@ -12,6 +12,7 @@ if ARGV.length < 2
   exit(1)
 end
 
+# load training data
 traindata = []
 degree = 0
 open(ARGV[0]) do |f|
@@ -30,19 +31,10 @@ open(ARGV[0]) do |f|
   end
 end
 
-=begin
-traindata = [  # AND
-  [[0, 0], -1],
-  [[1, 0], -1],
-  [[0, 1], -1],
-  [[1, 1], +1],
-]
-=end
-
+# perceptron
 w = Array.new(degree + 1, 0)
 opt[:iteration].times do |c|
-  # shuffle
-  traindata = traindata.sort_by{rand}
+  traindata = traindata.sort_by{rand} # shuffle
 
   # training
   n_errors = 0
