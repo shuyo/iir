@@ -27,8 +27,7 @@ data.each do |x, t|
   x[w.size-1] = 1 # bias
   s = 0
   x.each do |i, x_i|
-    p [i, x_i, w[i]] if w[i]==nil || x_i==nil
-    s += w[i] * x_i
+    s += w[i] * x_i if i < w.size
   end
   result[(t>0?2:0)+(s>0?1:0)] += 1
 end
