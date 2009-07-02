@@ -1,17 +1,28 @@
 #!/usr/bin/ruby
 
 require 'optparse'
-opt = {:algo=>:P, :iteration=>10}
+opt = {:algo=>:P, :iteration=>10, :regularity=>1.0}
 parser = OptionParser.new
 parser.banner = "Usage: #$0 [options] trainfile modelfile"
 parser.on('-i [VAL]', Integer, 'number of iteration') {|v| opt[:iteration] = v }
 parser.on('-a [VAL]', [:P, :AP, :PA, :PA1, :PA2], 'algorism') {|v| opt[:algo] = v }
+parser.on('-C [VAL]', Float, 'regularity for PA1/PA2') {|v| opt[:regularity] = v }
 parser.parse!(ARGV)
 if ARGV.length < 2
   $stderr.puts parser
   exit(1)
 end
 
+
+# common
+
+def square_abs(x)
+  square_abs_x = 0
+  x.each do |i, x_i|
+    square_abs_x += x_i * x_i
+  end
+  square_abs_x
+end
 
 class Train
   def initialize(degree)
@@ -40,7 +51,10 @@ class Train
   end
 end
 
-def perceptron(traindata, degree, iteration=10)
+
+# algorism
+
+def perceptron(traindata, degree, iteration)
   training = Train.new(degree)
   c = training.loop(traindata, iteration) do |w, x, t, s|
     if s * t <= 0  # error
@@ -52,7 +66,7 @@ def perceptron(traindata, degree, iteration=10)
   return [training, c]
 end
 
-def average_perceptron(traindata, degree, iteration=10)
+def average_perceptron(traindata, degree, iteration)
   training = Train.new(degree)
   iteration.times do |c|
     w_a = Array.new(degree + 1, 0) # for average perceptron
@@ -74,6 +88,20 @@ def average_perceptron(traindata, degree, iteration=10)
   return [training, nil]
 end
 
+def passive_aggressive(traindata, degree, iteration, aggressiveness=nil, regularity=0)
+  training = Train.new(degree)
+  c = training.loop(traindata, iteration) do |w, x, correct, predict|
+    loss = 1 - correct * predict
+    if loss > 0
+      tau = loss.to_f / (square_abs(x) + regularity)
+      tau = aggressiveness if aggressiveness && tau > aggressiveness
+      x.each do |i, x_i|
+        w[i] += tau * correct * x_i
+      end
+    end
+  end
+  return [training, c]
+end
 
 
 
@@ -96,12 +124,20 @@ open(ARGV[0]) do |f|
   end
 end
 
+# training
+
 training, convergence = if opt[:algo] == :P
   perceptron(traindata, degree, opt[:iteration])
 elsif opt[:algo] == :AP
   average_perceptron(traindata, degree, opt[:iteration])
+elsif opt[:algo] == :PA
+  passive_aggressive(traindata, degree, opt[:iteration])
+elsif opt[:algo] == :PA1
+  passive_aggressive(traindata, degree, opt[:iteration], opt[:regularity])
+elsif opt[:algo] == :PA2
+  passive_aggressive(traindata, degree, opt[:iteration], nil, 0.5 / opt[:regularity])
 end
-puts "convergence: #{convergence}" if convergence
 
+puts "convergence: #{convergence}" if convergence
 open(ARGV[1], 'w'){|f| Marshal.dump(training.w, f) }
 
