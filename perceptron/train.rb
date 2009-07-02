@@ -5,12 +5,77 @@ opt = {:algo=>:P, :iteration=>10}
 parser = OptionParser.new
 parser.banner = "Usage: #$0 [options] trainfile modelfile"
 parser.on('-i [VAL]', Integer, 'number of iteration') {|v| opt[:iteration] = v }
-parser.on('-a [VAL]', [:P, :AP], 'algorism') {|v| opt[:algo] = v }
+parser.on('-a [VAL]', [:P, :AP, :PA, :PA1, :PA2], 'algorism') {|v| opt[:algo] = v }
 parser.parse!(ARGV)
 if ARGV.length < 2
   $stderr.puts parser
   exit(1)
 end
+
+
+class Train
+  def initialize(degree)
+    @degree = degree
+    @w = Array.new(degree + 1, 0)
+  end
+  attr_accessor :w
+
+  def loop(traindata, iteration=1, will_shuffle=true)
+    pre_w = @w.dup
+    iteration.times do |c|
+
+      traindata = traindata.sort_by{rand} if will_shuffle
+      traindata.each do |x, t|
+        x[@degree] = 1 # bias
+        s = 0        # sigma w^T phai(x_n)
+        x.each do |i, x_i|
+          s += @w[i] * x_i
+        end
+        yield @w, x, t, s
+      end
+
+      return c if pre_w == @w
+    end
+    nil
+  end
+end
+
+def perceptron(traindata, degree, iteration=10)
+  training = Train.new(degree)
+  c = training.loop(traindata, iteration) do |w, x, t, s|
+    if s * t <= 0  # error
+      x.each do |i, x_i|
+        w[i] += t * x_i
+      end
+    end
+  end
+  return [training, c]
+end
+
+def average_perceptron(traindata, degree, iteration=10)
+  training = Train.new(degree)
+  iteration.times do |c|
+    w_a = Array.new(degree + 1, 0) # for average perceptron
+    n = 0
+    is_convergenced = training.loop(traindata) do |w, x, t, s|
+      if s * t <= 0  # error
+        x.each do |i, x_i|
+          w[i] += t * x_i
+          w_a[i] += t * x_i * n # for average perceptron
+        end
+      end
+      n += 1
+    end
+    return [training, c] if is_convergenced
+    w_a.each_with_index do |w_i, i|
+      training.w[i] -= w_i.to_f / n     # for averate perceptron
+    end
+  end
+  return [training, nil]
+end
+
+
+
 
 # load training data
 traindata = []
@@ -31,39 +96,12 @@ open(ARGV[0]) do |f|
   end
 end
 
-# perceptron
-w = Array.new(degree + 1, 0)
-opt[:iteration].times do |c|
-  traindata = traindata.sort_by{rand} # shuffle
-
-  # training
-  n_errors = 0
-  w_a = Array.new(degree + 1, 0) # for average perceptron
-  n = 0
-  traindata.each do |x, t|
-    x[degree] = 1 # bias
-    s = 0        # sigma w^T phai(x_n)
-    x.each do |i, x_i|
-      s += w[i] * x_i
-    end
-    if s * t <= 0  # error
-      n_errors += 1
-      x.each do |i, x_i|
-        w[i] += t * x_i
-        w_a[i] += t * x_i * n # for average perceptron
-      end
-    end
-    n += 1
-  end
-  w_a.each_with_index do |w_i, i|
-    w[i] -= w_i.to_f / n
-  end if  opt[:algo] == :AP
-
-  if n_errors == 0
-    puts "convergence: #{c}"
-    break
-  end
+training, convergence = if opt[:algo] == :P
+  perceptron(traindata, degree, opt[:iteration])
+elsif opt[:algo] == :AP
+  average_perceptron(traindata, degree, opt[:iteration])
 end
+puts "convergence: #{convergence}" if convergence
 
-open(ARGV[1], 'w'){|f| Marshal.dump(w, f) }
+open(ARGV[1], 'w'){|f| Marshal.dump(training.w, f) }
 
