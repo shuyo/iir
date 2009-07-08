@@ -5,8 +5,8 @@ opt = {:algo=>:P, :iteration=>10, :regularity=>1.0}
 parser = OptionParser.new
 parser.banner = "Usage: #$0 [options] trainfile modelfile"
 parser.on('-i [VAL]', Integer, 'number of iteration') {|v| opt[:iteration] = v }
-parser.on('-a [VAL]', [:P, :AP, :PA, :PA1, :PA2], 'algorism') {|v| opt[:algo] = v }
-parser.on('-C [VAL]', Float, 'regularity for PA1/PA2') {|v| opt[:regularity] = v }
+parser.on('-a [VAL]', [:P, :AP, :PA, :PA1, :PA2], 'algorism(P/AP/PA/PA1/PA2)') {|v| opt[:algo] = v }
+parser.on('-C [VAL]', Float, 'regularization parameter (for PA1/PA2)') {|v| opt[:regularity] = v }
 parser.parse!(ARGV)
 if ARGV.length < 2
   $stderr.puts parser
