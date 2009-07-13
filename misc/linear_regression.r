@@ -100,11 +100,16 @@ curve_fitting <- data.frame(
 	t=c(0.349486,0.830839,1.007332,0.971507,0.133066,0.166823,-0.848307,-0.445686,-0.563567,0.261502)
 )
 
-calc_evidence <- function(phi, D, alpha=2) {
+calc_evidence <- function(phi, D, alpha=2, beta=25) {
 	M <- length(phi)
 	N <- length(D$x)
-
 	PHI <- sapply(phi, function(f)f(D$x))
+
+	if (beta=="ml") {
+		w_ML <- solve(t(PHI) %*% PHI) %*% t(PHI) %*% D$t
+		beta_ML_inv <- 1/N * sum(lapply(1:N), function(n)D[n,]$x lapply(phi, function(f)
+	}
+
 	A <- alpha * diag(M) + beta * t(PHI) %*% PHI  # equal to S_N(PRML 3.54)
 	m_N <- beta * solve(A) %*% t(PHI) %*% D$t
 	E_m_N <- beta / 2 * sum((D$x - PHI %*% m_N)^2) + alpha / 2 * sum(m_N^2)
