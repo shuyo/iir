@@ -24,8 +24,15 @@ curve_fitting <- data.frame(
 calc_evidence <- function(phi, D, alpha=2, beta=25) {
 	M <- length(phi)
 	N <- length(D$x)
-
 	PHI <- sapply(phi, function(f)f(D$x))
+
+	if (beta=="ml") {
+		w_ML <- solve(t(PHI) %*% PHI) %*% t(PHI) %*% D$t
+		loss <- D$t - PHI %*% w_ML
+		beta <- N / sum(loss^2)
+		print(beta)
+	}
+
 	A <- alpha * diag(M) + beta * t(PHI) %*% PHI  # equal to S_N(PRML 3.54)
 	m_N <- beta * solve(A) %*% t(PHI) %*% D$t
 	E_m_N <- beta / 2 * sum((D$x - PHI %*% m_N)^2) + alpha / 2 * sum(m_N^2)
