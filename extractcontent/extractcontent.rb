@@ -117,7 +117,7 @@ module ExtractContent
       end
       bodylist << [body, score]
       body = bodylist.inject{|a,b| if a[1]>=b[1] then a else b end }
-      [strip_tags(body[0]), title]
+      [body[0], title]
     end
 
     # Extracts title.
