@@ -8,7 +8,7 @@ TAGLIST = [
 "div","h1","h2","h3","h4","h5","h6",
 "a","br","img","li","tr","span","b","font","p","table","input","option","dd","td","script","dt","ul","em","strong","th","small","form","dl","hr","wbr","cite","body","label","noscript","area","tbody","i","iframe","nobr","button","select","style","param","blockquote","scr","textarea","rdf","u","ol","o","center","col","address","tt","link","map","sup","embed","object","v","fieldset","rp","colgroup","sc","n","meta","legend","optgroup","caption","abbr","code","thead","big","pre","rb","ruby","rt","del","title","html","comment","s","fn","head","frame","sub","strike","marquee","spacer","keeper","smoothie","d","name","id","frameset","acronym","author","updated","file","noframes","this","dfn","fb","ins","csobj","len","basefont","noindex","category","tfoot","content","obj","entry","ifr","scri","limit","var","t","bold","linklist","feed","kbd","http","l","im","nolayer","bu","document","w","com","blink","ilayer","c","msearch","image","place","csaction","base","arimgname","darea","q"]
 
-CHARLIST = "!\"\#$%&'()-=~^|\\[]{}<>@`+*;:,.?_/、。・！？「」『』【】"
+CHARLIST = "!\"\#$%&'()-=~^|\\[]{}<>@`+*;:,.?_/、。・！？「」『』【】".scan(/./)
 
 SEPARATORS = {
   /<!--\s*google_ad_section_start/ => :body,
@@ -70,6 +70,15 @@ class ExtractFeature
       end
       features = Hash.new(0)
       TAGLIST.each_with_index{|tag, i| features[i] = block_tags[tag] if block_tags.key?(tag) }
+
+      charmap = Hash.new
+      CHARLIST.each {|x| charmap[x] = 0}
+      plain_text = block.gsub(/<!--.*?-->/,'').gsub(/<[A-Za-z][^>]*>/,'')
+      plain_text.scan(/./) {|x| charmap[x] += 1 if charmap.key?(x) }
+      offset = TAGLIST.length
+      CHARLIST.each_with_index do |c, i|
+        features[offset + i] = charmap[c] if charmap[c]>0
+      end
 
       # detect class
       post_class = now_class = nil
