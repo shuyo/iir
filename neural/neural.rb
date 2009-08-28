@@ -106,7 +106,7 @@ class Weights
       d[unit] << "#{@parameters[i]} * #{@from_units[i].name}"
     end
     d.each do |unit, formula|
-      puts "#{unit.name} = #{unit.formula_name}( #{formula.join(" + ")} )"
+      puts "#{unit.name} <- #{unit.formula_name}( #{formula.join(" + ")} );"
     end
   end
 end
