@@ -11,13 +11,12 @@ class Unit
     __id__==other.__id__
   end
 end
+class BiasUnit < Unit
+end
 class IdentityUnit < Unit
   def formula_name; ""; end
   def activation_func(a)
     a
-  end
-  def div(a)
-    1
   end
   def divback(z)
     1
@@ -28,28 +27,23 @@ class TanhUnit < Unit
   def activation_func(a)
     Math.tanh(a)
   end
-  def div(a)
-    1-Math.tanh(a)**2
-  end
   # divergence for backward
   def divback(z)
     1-z*z
   end
 end
-class BiasUnit < Unit
+class SigUnit < Unit
+  def formula_name; "sig"; end
   def activation_func(a)
-    1
-  end
-  def div(a)
-    0
+    1.0/(1+Math.exp(-a))
   end
   def divback(z)
-    0
+    z*(1-z)
   end
 end
 
 
-
+# weight parameters
 class Weights
   EPSILON = 0.001
   def initialize
@@ -112,7 +106,7 @@ class Weights
 end
 
 
-
+# neural network
 class Network
   def initialize
     @units = []
@@ -176,7 +170,6 @@ class Network
       end
       raise "There is a hidden unit without input unit or bias." unless advance
     end
-
     #values.each {|unit, z| puts "#{unit.name} = #{z}" }
 
     @out_list.map{|unit| values[unit]}
