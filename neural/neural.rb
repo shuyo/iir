@@ -113,6 +113,8 @@ class Network
     @weights = Weights.new
     @in_list = []
     @out_list = []
+    @forward_prop = nil
+    @backward_prop = nil
   end
   def link(from_list, to_list)
     append_unit from_list
@@ -138,8 +140,38 @@ class Network
       raise "There is a output unit without link." unless @units.include?(unit)
     end
   end
+
+  def arrange_units
+    calcurated = Hash.new
+    @units.each do |unit|
+      calcurated[unit] = 1 if unit.instance_of?(BiasUnit) || @in_list.include?(unit)
+    end
+
+    arranged = []
+    while calcurated.size < @units.length
+      advance = false
+      @units.each do |unit|
+        next if calcurated.key?(unit)
+        in_list = @weights.in_units(unit)
+        if in_list.keys.all?{|z| calcurated.key?(z)}
+          arranged << unit
+          calcurated[unit] = 1
+          advance = true
+        end
+      end
+      raise "There is a not-calcurable unit." unless advance
+    end
+
+    arranged
+  end
+
+  def forward_prop
+    @forward_prop = arrange_units unless @forward_prop
+    @forward_prop
+  end
+
   def apply(*params)
-    raise "not equal number of parameters to number of input units" if params.length != @in_list.length
+    raise "not equal # of parameters to # of input units" if params.length != @in_list.length
 
     values = Hash.new
     @units.each do |unit|
@@ -149,26 +181,13 @@ class Network
       values[unit] = params[i]
     end
 
-    while values.size < @units.length
-      advance = false
-      @units.each do |unit|
-        next if values.key?(unit)
-        in_list = @weights.in_units(unit)
-        a = 0
-        in_list.each do |in_unit, x|
-          if values.key?(in_unit)
-            a += values[in_unit] * x
-          else
-            a = nil
-            break
-          end
-        end
-        unless a.nil?
-          values[unit] = unit.activation_func(a)
-          advance = true
-        end
+    forward_prop.each do |unit|
+      linear_units = @weights.in_units(unit)
+      a = 0
+      linear_units.each do |z, w|
+        a += w * values[z]
       end
-      raise "There is a hidden unit without input unit or bias." unless advance
+      values[unit] = unit.activation_func(a)
     end
     #values.each {|unit, z| puts "#{unit.name} = #{z}" }
 
