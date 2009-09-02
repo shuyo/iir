@@ -97,10 +97,14 @@ class Weights
     d = Hash.new
     @to_units.each_with_index do |unit, i|
       d[unit] ||= []
-      d[unit] << "#{@parameters[i]} * #{@from_units[i].name}"
+      if @from_units[i].instance_of?(BiasUnit)
+        d[unit] << "#{@parameters[i]}"
+      else
+        d[unit] << "#{@parameters[i]} * #{@from_units[i].name}"
+      end
     end
     d.each do |unit, formula|
-      puts "#{unit.name} <- #{unit.formula_name}( #{formula.join(" + ")} );"
+      puts "#{unit.name} <- #{unit.formula_name}( #{formula.join(" + ")} );".gsub('+ -','- ')
     end
   end
 end

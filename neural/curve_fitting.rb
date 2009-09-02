@@ -12,28 +12,30 @@ D = [
 ]
 
 # units
-in_unit = Unit.new("x1")
-bias = BiasUnit.new("1")
+in_unit = [Unit.new("x1")]
+bias = [BiasUnit.new("1")]
 hiddenunits = [TanhUnit.new("z1"), TanhUnit.new("z2"), TanhUnit.new("z3"), TanhUnit.new("z4")]
-out_unit = IdentityUnit.new("y1")
+out_unit = [IdentityUnit.new("y1")]
 
 # network
 network = Network.new
-network.in  = [in_unit]
-network.link [in_unit, bias], hiddenunits
-network.link hiddenunits + [bias], [out_unit]
-network.out = [out_unit]
+network.in  = in_unit
+network.link in_unit + bias, hiddenunits
+network.link hiddenunits + bias, out_unit
+network.out = out_unit
 
 eta = 0.1
+sum_e = 999999
 1000.times do |tau|
-  error1 = error2 = 0
+  error = 0
   D.sort{rand}.each do |data|
-    error1 += network.sum_of_squares_error([data[0]], [data[1]])
+    error += network.sum_of_squares_error([data[0]], [data[1]])
     grad = network.gradient_E([data[0]], [data[1]])
-    network.descent_weights eta, grad
-    error2 += network.sum_of_squares_error([data[0]], [data[1]])
+    network.weights.descent eta, grad
   end
-  puts "error func: #{error1} => #{error2}"
+  puts "error func(#{tau}): #{error}"
+  break if sum_e < error
+  sum_e = error
 end
 network.weights.dump
 
