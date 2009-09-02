@@ -45,28 +45,42 @@ end
 
 # weight parameters
 class Weights
-  EPSILON = 0.001
+  EPSILON = 0.00001
   def initialize
     @orig_parameters = @parameters = []
     @from_units = []
     @to_units = []
+    @map_to_index = Hash.new
+    @map_from_index = Hash.new
   end
   def append(from, to)
+    @map_to_index[to] ||= []
+    @map_to_index[to] << @parameters.length
+    @map_from_index[from] ||= []
+    @map_from_index[from] << @parameters.length
+
     @parameters << normrand(0, 1)
     @from_units << from
     @to_units << to
-  end
-  def in_units(out_list)
-    in_list = Hash.new
-    @to_units.each_with_index do |unit, i|
-      in_list[@from_units[i]] = @parameters[i] if out_list == unit
-    end
-    in_list
   end
   def normrand(m=0, s=1)
     r=0
     12.times{ r+=rand() }
     (r - 6) * s + m
+  end
+  def in_units(out_unit)
+    in_list = Hash.new
+    @map_to_index[out_unit].each do |i|
+      in_list[@from_units[i]] = @parameters[i]
+    end
+    in_list
+  end
+  def out_units(in_unit)
+    out_list = Hash.new
+    @map_from_index[in_unit].each do |i|
+      out_list[@to_units[i]] = @parameters[i]
+    end
+    out_list
   end
   def plus_epsilon(index)
     @parameters = @orig_parameters.dup
@@ -92,7 +106,11 @@ class Weights
   def parameters
     @parameters
   end
-
+  def each_from_to
+    @from_units.each_with_index do |from, i|
+      yield from, @to_units[i]
+    end
+  end
   def dump
     d = Hash.new
     @to_units.each_with_index do |unit, i|
@@ -145,7 +163,7 @@ class Network
     end
   end
 
-  def arrange_units
+  def arrange_forward
     calcurated = Hash.new
     @units.each do |unit|
       calcurated[unit] = 1 if unit.instance_of?(BiasUnit) || @in_list.include?(unit)
@@ -170,11 +188,40 @@ class Network
   end
 
   def forward_prop
-    @forward_prop = arrange_units unless @forward_prop
+    @forward_prop = arrange_forward unless @forward_prop
     @forward_prop
   end
 
-  def apply(*params)
+  def arrange_backward
+    calcurated = Hash.new
+    @out_list.each do |unit|
+      calcurated[unit] = 1
+    end
+
+    arranged = []
+    while true
+      advance = false
+      @units.each do |unit|
+        next if calcurated.key?(unit) || unit.instance_of?(BiasUnit) || @in_list.include?(unit)
+        out_list = @weights.out_units(unit)
+        if out_list.keys.all?{|z| calcurated.key?(z)}
+          arranged << unit
+          calcurated[unit] = 1
+          advance = true
+        end
+      end
+      break unless advance
+    end
+
+    arranged
+  end
+
+  def backward_prop
+    @backward_prop = arrange_backward unless @backward_prop
+    @backward_prop
+  end
+
+  def apply_forward(*params)
     raise "not equal # of parameters to # of input units" if params.length != @in_list.length
 
     values = Hash.new
@@ -193,8 +240,11 @@ class Network
       end
       values[unit] = unit.activation_func(a)
     end
-    #values.each {|unit, z| puts "#{unit.name} = #{z}" }
+    values
+  end
 
+  def apply(*params)
+    values = apply_forward(*params)
     @out_list.map{|unit| values[unit]}
   end
 
@@ -225,9 +275,34 @@ class Network
     g
   end
 
+  def gradient_E_backward(x, t)
+    z = apply_forward(*x)
+    delta = Hash.new
+    @out_list.each_with_index do |unit, i|
+      delta[unit] = z[unit] - t[i]
+    end
+    backward_prop.each do |unit|
+      out_list = @weights.out_units(unit)
+      d = 0
+      out_list.each do |out_unit, w_kj|
+        d += w_kj * delta[out_unit]
+      end
+      delta[unit] = unit.divback(z[unit]) * d
+    end
+
+    g = []
+    @weights.each_from_to do |from, to|
+      g << delta[to] * z[from]
+    end
+    g
+  end
+
+
+=begin
   def descent_weights(eta, grad)
     @weights.descent(eta, grad)
   end
+=end
 
   def weights
     @weights

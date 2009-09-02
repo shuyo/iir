@@ -30,7 +30,8 @@ sum_e = 999999
   error = 0
   D.sort{rand}.each do |data|
     error += network.sum_of_squares_error([data[0]], [data[1]])
-    grad = network.gradient_E([data[0]], [data[1]])
+    #grad = network.gradient_E([data[0]], [data[1]])
+    grad = network.gradient_E_backward([data[0]], [data[1]])
     network.weights.descent eta, grad
   end
   puts "error func(#{tau}): #{error}"
