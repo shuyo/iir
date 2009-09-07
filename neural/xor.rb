@@ -35,7 +35,7 @@ sum_e = 999999
   sum_e = s
 
   D.sort{rand}.each do |data|
-    grad = network.gradient_E(data[0], data[1])
+    grad = network.gradient_E_backward(data[0], data[1])
     network.weights.descent eta, grad
   end
 end
