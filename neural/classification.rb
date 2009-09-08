@@ -16,7 +16,7 @@ hiddenunits = [TanhUnit.new("z1"), TanhUnit.new("z2"), TanhUnit.new("z3"), TanhU
 out_unit = [SigUnit.new("y1")]
 
 # network
-network = Network.new
+network = Network.new(:error_func=>ErrorFunction::CrossEntropy)
 network.in  = in_units
 network.link in_units + bias, hiddenunits
 network.link hiddenunits + bias, out_unit
@@ -27,14 +27,14 @@ sum_e = 999999
 1000.times do |tau|
   s = 0
   data.each do |d|
-    s += network.sum_of_squares_error(d[0], d[1])
+    s += network.error_function(d[0], d[1])
   end
   puts "sum of errors: #{tau} => #{s}"
   break if s > sum_e
   sum_e = s
 
   data.sort{rand}.each do |d|
-    grad = network.gradient_E_backward(d[0], d[1])
+    grad = network.gradient_E(d[0], d[1])
     network.weights.descent eta, grad
   end
 end

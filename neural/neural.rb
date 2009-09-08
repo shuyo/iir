@@ -42,10 +42,80 @@ class SigUnit < Unit
   end
 end
 
+module ErrorFunction
+  module SquaresSum
+    def self.call(y, t)
+      e = 0
+      y.each_with_index do |y_i, i|
+        e += (y_i - t[i]) ** 2
+      end
+      e / 2
+    end
+  end
+  module CrossEntropy
+    def self.call(y, t)
+      e = 0
+      y.each_with_index do |y_i, i|
+        e -= t[i] * Math.log(y_i) + (1 - t[i]) * Math.log(1 - y_i)
+      end
+      e
+    end
+  end
+  module SoftMax
+    def self.call(y, t)
+      e = 0
+      y.each_with_index do |y_i, i|
+        e -= t[i] * Math.log(y_i)
+      end
+      e
+    end
+  end
+end
+
+module Gradient
+  module NumericalDiff
+    EPSILON = 0.0001
+    def self.gradient_E(network, x, t)
+      g = []
+      network.weights.size.times do |index|
+        network.weights.parameters[index] += EPSILON
+        e1 = network.error_function(x, t)
+        network.weights.back_to_orig
+
+        network.weights.parameters[index] -= EPSILON
+        e2 = network.error_function(x, t)
+        network.weights.back_to_orig
+
+        g << (e1 - e2) / (2 * EPSILON)
+      end
+      g
+    end
+  end
+
+  module BackPropagate
+    def self.gradient_E(network, x, t)
+      z = network.apply_forward(*x)
+      delta = network.calculate_delta(z, t)
+      network.backward_prop.each do |unit|
+        out_list = network.weights.out_units(unit)
+        d = 0
+        out_list.each do |out_unit, w_kj|
+          d += w_kj * delta[out_unit]
+        end
+        delta[unit] = unit.divback(z[unit]) * d
+      end
+
+      g = []
+      network.weights.each_from_to do |from, to|
+        g << delta[to] * z[from]
+      end
+      g
+    end
+  end
+end
 
 # weight parameters
 class Weights
-  EPSILON = 0.00001
   def initialize
     @orig_parameters = @parameters = []
     @from_units = []
@@ -81,14 +151,6 @@ class Weights
       out_list[@to_units[i]] = @parameters[i]
     end
     out_list
-  end
-  def plus_epsilon(index)
-    @parameters = @orig_parameters.dup
-    @parameters[index] += EPSILON
-  end
-  def minus_epsilon(index)
-    @parameters = @orig_parameters.dup
-    @parameters[index] -= EPSILON
   end
   def back_to_orig
     @parameters = @orig_parameters
@@ -130,7 +192,9 @@ end
 
 # neural network
 class Network
-  def initialize
+  def initialize(opt={})
+    @error_func = opt[:error_func] || ErrorFunction::SquaresSum
+    @gradient = opt[:gradient] || Gradient::BackPropagate
     @units = []
     @weights = Weights.new
     @in_list = []
@@ -248,61 +312,21 @@ class Network
     @out_list.map{|unit| values[unit]}
   end
 
-  def sum_of_squares_error(x, t)
-    y = apply(*x)
-    e = 0
-    y.each_with_index do |y_i, i|
-      e += (y_i - t[i]) ** 2
-    end
-    e / 2
-  end
-
-  # divergence with central difference
-  def divergent_E(index, x, t)
-    @weights.plus_epsilon index
-    e1 = sum_of_squares_error(x, t)
-    @weights.minus_epsilon index
-    e2 = sum_of_squares_error(x, t)
-
-    (e1 - e2) / (2 * Weights::EPSILON)
-  end
-  
-  def gradient_E(x, t)
-    g = []
-    @weights.size.times do |i|
-      g << divergent_E(i, x, t)
-    end
-    g
-  end
-
-  def gradient_E_backward(x, t)
-    z = apply_forward(*x)
+  def calculate_delta(z, t)
     delta = Hash.new
     @out_list.each_with_index do |unit, i|
       delta[unit] = z[unit] - t[i]
     end
-    backward_prop.each do |unit|
-      out_list = @weights.out_units(unit)
-      d = 0
-      out_list.each do |out_unit, w_kj|
-        d += w_kj * delta[out_unit]
-      end
-      delta[unit] = unit.divback(z[unit]) * d
-    end
-
-    g = []
-    @weights.each_from_to do |from, to|
-      g << delta[to] * z[from]
-    end
-    g
+    delta
   end
 
-
-=begin
-  def descent_weights(eta, grad)
-    @weights.descent(eta, grad)
+  def error_function(x, t)
+    @error_func.call(apply(*x), t)
   end
-=end
+
+  def gradient_E(x, t)
+    @gradient.gradient_E(self, x, t)
+  end
 
   def weights
     @weights

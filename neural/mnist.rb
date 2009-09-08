@@ -49,7 +49,7 @@ hiddenunits = (1..300).map{|i| TanhUnit.new("z#{i}")}
 out_unit = (1..10).map{|i| SigUnit.new("y#{i}")}
 
 # network
-network = Network.new
+network = Network.new(:error_func=>ErrorFunction::CrossEntropy) # ErrorFunction::SoftMax
 network.in  = in_units
 network.link in_units + bias, hiddenunits
 network.link hiddenunits + bias, out_unit
@@ -60,7 +60,7 @@ eta = 0.1
     image = image.unpack('C*')
     target = [0]*10
     target[labels[idx]] = 1
-    grad = network.gradient_E_backward(image, target)
+    grad = network.gradient_E(image, target)
     network.weights.descent eta, grad
     puts idx
   end
