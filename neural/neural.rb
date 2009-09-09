@@ -88,17 +88,22 @@ module Gradient
   end
 
   BackPropagate = Proc.new do |network, x, t|
+    # calculate z of all units
     z = network.apply_forward(*x)
+
+    # calculate delta(error) of output units
     delta = network.calculate_delta(z, t)
+
+    # calculate delta(error) of hidden units
     network.backward_prop.each do |unit|
-      out_list = network.weights.out_units(unit)
       d = 0
-      out_list.each do |out_unit, w_kj|
+      network.weights.each_out_units(unit) do |out_unit, w_kj|
         d += w_kj * delta[out_unit]
       end
       delta[unit] = unit.divback(z[unit]) * d
     end
 
+    # calculate difference of all weights
     g = []
     network.weights.each_from_to do |from, to|
       g << delta[to] * z[from]
@@ -137,6 +142,16 @@ class Weights
       in_list[@from_units[i]] = @parameters[i]
     end
     in_list
+  end
+  def each_in_units(out_unit)
+    @map_to_index[out_unit].each do |i|
+      yield @from_units[i], @parameters[i]
+    end
+  end
+  def each_out_units(in_unit)
+    @map_from_index[in_unit].each do |i|
+      yield @to_units[i], @parameters[i]
+    end
   end
   def out_units(in_unit)
     out_list = Hash.new
@@ -294,9 +309,8 @@ class Network
     end
 
     forward_prop.each do |unit|
-      linear_units = @weights.in_units(unit)
       a = 0
-      linear_units.each do |z, w|
+      @weights.each_in_units(unit) do |z, w|
         a += w * values[z]
       end
       values[unit] = unit.activation_func(a)
