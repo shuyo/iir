@@ -42,75 +42,68 @@ class SigUnit < Unit
   end
 end
 
+# error function
 module ErrorFunction
-  module SquaresSum
-    def self.call(y, t)
-      e = 0
-      y.each_with_index do |y_i, i|
-        e += (y_i - t[i]) ** 2
-      end
-      e / 2
+  SquaresSum = Proc.new do |y, t|
+    e = 0
+    y.each_with_index do |y_i, i|
+      e += (y_i - t[i]) ** 2
     end
+    e / 2
   end
-  module CrossEntropy
-    def self.call(y, t)
-      e = 0
-      y.each_with_index do |y_i, i|
-        e -= t[i] * Math.log(y_i) + (1 - t[i]) * Math.log(1 - y_i)
-      end
-      e
+  CrossEntropy = Proc.new do |y, t|
+    e = 0
+    y.each_with_index do |y_i, i|
+      e -= t[i] * Math.log(y_i) + (1 - t[i]) * Math.log(1 - y_i)
     end
+    e
   end
-  module SoftMax
-    def self.call(y, t)
-      e = 0
-      y.each_with_index do |y_i, i|
-        e -= t[i] * Math.log(y_i)
-      end
-      e
+  SoftMax = Proc.new do |y, t|
+    e = 0
+    y.each_with_index do |y_i, i|
+      e -= t[i] * Math.log(y_i)
     end
+    e
   end
 end
 
+# gradient of error function
 module Gradient
-  module NumericalDiff
-    EPSILON = 0.0001
-    def self.gradient_E(network, x, t)
-      g = []
-      network.weights.size.times do |index|
-        network.weights.parameters[index] += EPSILON
-        e1 = network.error_function(x, t)
-        network.weights.back_to_orig
+  EPSILON = 0.0001
 
-        network.weights.parameters[index] -= EPSILON
-        e2 = network.error_function(x, t)
-        network.weights.back_to_orig
+  NumericalDiff = Proc.new do |network, x, t|
+    g = []
+    network.weights.size.times do |index|
+      network.weights.parameters[index] += EPSILON
+      e1 = network.error_function(x, t)
+      network.weights.back_to_orig
 
-        g << (e1 - e2) / (2 * EPSILON)
-      end
-      g
+      network.weights.parameters[index] -= EPSILON
+      e2 = network.error_function(x, t)
+      network.weights.back_to_orig
+
+      g << (e1 - e2) / (2 * EPSILON)
     end
+    g
   end
 
-  module BackPropagate
-    def self.gradient_E(network, x, t)
-      z = network.apply_forward(*x)
-      delta = network.calculate_delta(z, t)
-      network.backward_prop.each do |unit|
-        out_list = network.weights.out_units(unit)
-        d = 0
-        out_list.each do |out_unit, w_kj|
-          d += w_kj * delta[out_unit]
-        end
-        delta[unit] = unit.divback(z[unit]) * d
+  BackPropagate = Proc.new do |network, x, t|
+    z = network.apply_forward(*x)
+    delta = network.calculate_delta(z, t)
+    network.backward_prop.each do |unit|
+      out_list = network.weights.out_units(unit)
+      d = 0
+      out_list.each do |out_unit, w_kj|
+        d += w_kj * delta[out_unit]
       end
-
-      g = []
-      network.weights.each_from_to do |from, to|
-        g << delta[to] * z[from]
-      end
-      g
+      delta[unit] = unit.divback(z[unit]) * d
     end
+
+    g = []
+    network.weights.each_from_to do |from, to|
+      g << delta[to] * z[from]
+    end
+    g
   end
 end
 
@@ -202,6 +195,13 @@ class Network
     @forward_prop = nil
     @backward_prop = nil
   end
+
+  def append_unit(list)
+    list.each do |unit|
+      @units << unit unless @units.include?(unit)
+    end
+  end
+
   def link(from_list, to_list)
     append_unit from_list
     append_unit to_list
@@ -211,15 +211,12 @@ class Network
       end
     end
   end
+
   def in=(in_list)
     @in_list = in_list
     append_unit in_list
   end
-  def append_unit(list)
-    list.each do |unit|
-      @units << unit unless @units.include?(unit)
-    end
-  end
+
   def out=(out_list)
     @out_list = out_list
     out_list.each do |unit|
@@ -325,7 +322,7 @@ class Network
   end
 
   def gradient_E(x, t)
-    @gradient.gradient_E(self, x, t)
+    @gradient.call(self, x, t)
   end
 
   def weights
