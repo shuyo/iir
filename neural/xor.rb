@@ -17,7 +17,7 @@ hiddenunits = [TanhUnit.new("z1"), TanhUnit.new("z2"), TanhUnit.new("z3"), TanhU
 out_unit = [SigUnit.new("y1")]
 
 # network
-network = Network.new(:error_func=>ErrorFunction::CrossEntropy) #:gradient=>Gradient::NumericalDiff
+network = Network.new(:error_func=>ErrorFunction::CrossEntropy, :code_generate=>true)
 network.in  = in_units
 network.link in_units + bias, hiddenunits
 network.link hiddenunits + bias, out_unit

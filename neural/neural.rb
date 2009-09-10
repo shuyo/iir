@@ -44,6 +44,10 @@ class SigUnit < Unit
   end
 end
 
+def tanh(a); Math.tanh(a); end
+def sig(a); 1.0/(1+Math.exp(-a)); end
+
+
 # error function
 module ErrorFunction
   SquaresSum = Proc.new do |y, t|
@@ -150,6 +154,11 @@ class Weights
       yield @from_units[i], @parameters[i]
     end
   end
+  def each_in_units_index(out_unit)
+    @map_to_index[out_unit].each do |i|
+      yield @from_units[i], i
+    end
+  end
   def each_out_units(in_unit)
     @map_from_index[in_unit].each do |i|
       yield @to_units[i], @parameters[i]
@@ -205,6 +214,7 @@ class Network
   def initialize(opt={})
     @error_func = opt[:error_func] || ErrorFunction::SquaresSum
     @gradient = opt[:gradient] || Gradient::BackPropagate
+    @code_generate = opt[:code_generate]
     @units = []
     @weights = Weights.new
     @in_list = []
@@ -279,6 +289,42 @@ class Network
     @forward_prop
   end
 
+  def generated_forward_prop(params)
+    unless @generated_forward_prop
+      proc = []
+      proc << "Proc.new do |network, params|"
+      proc << "w_=network.weights.parameters"
+      proc << "r_=Array.new(#{@units.length})"
+
+      unit_index = Hash.new
+      @units.each_with_index do |u, i|
+        proc << "r_[#{i}]=1" if u.instance_of?(BiasUnit)
+        unit_index[u] = i
+      end
+
+      @in_list.each_with_index do |unit, i|
+        proc << "r_[#{unit_index[unit]}]=#{unit.name}=params[#{i}]"
+      end
+
+      forward_prop.each do |unit|
+        forms = []
+        @weights.each_in_units_index(unit) do |u, i|
+          if u.instance_of?(BiasUnit)
+            forms << "w_[#{i}]"
+          else
+            forms << "w_[#{i}]*#{u.name}"
+          end
+        end
+        proc << "r_[#{unit_index[unit]}]=#{unit.name}=#{unit.formula_name}(#{forms.join("+")})"
+      end
+      proc << "r_"
+      proc << "end"
+      #puts proc.join("\n")
+      @generated_forward_prop = eval(proc.join("\n"))
+    end
+    @generated_forward_prop.call(self, params)
+  end
+
   def arrange_backward
     calcurated = Hash.new
     @out_list.each do |unit|
@@ -316,19 +362,24 @@ class Network
     raise "not equal # of parameters to # of input units" if params.length != @in_list.length
 
     values = Hash.new
-    @units.each do |unit|
-      values[unit] = 1 if unit.instance_of?(BiasUnit)
-    end
-    @in_list.each_with_index do |unit, i|
-      values[unit] = params[i]
-    end
-
-    forward_prop.each do |unit|
-      a = 0
-      @weights.each_in_units(unit) do |z, w|
-        a += w * values[z]
+    if @code_generate
+      z = generated_forward_prop(params)
+      @units.each_with_index {|unit, i| values[unit] = z[i]}
+    else
+      @units.each do |unit|
+        values[unit] = 1 if unit.instance_of?(BiasUnit)
       end
-      values[unit] = unit.activation_func(a)
+      @in_list.each_with_index do |unit, i|
+        values[unit] = params[i]
+      end
+
+      forward_prop.each do |unit|
+        a = 0
+        @weights.each_in_units(unit) do |z, w|
+          a += w * values[z]
+        end
+        values[unit] = unit.activation_func(a)
+      end
     end
 
     if @softmax_output

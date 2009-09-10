@@ -49,7 +49,7 @@ hiddenunits = (1..100).map{|i| TanhUnit.new("z#{i}")}
 out_unit = (1..10).map{|i| SoftMaxUnit.new("y#{i}")}
 
 # network
-network = Network.new(:error_func=>ErrorFunction::SoftMax)
+network = Network.new(:error_func=>ErrorFunction::SoftMax, :code_generate=>true)
 network.in  = in_units
 network.link in_units + bias, hiddenunits
 network.link hiddenunits + bias, out_unit
