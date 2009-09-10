@@ -22,6 +22,8 @@ class IdentityUnit < Unit
     1
   end
 end
+class SoftMaxUnit < IdentityUnit
+end
 class TanhUnit < Unit
   def formula_name; "tanh"; end
   def activation_func(a)
@@ -89,7 +91,7 @@ module Gradient
 
   BackPropagate = Proc.new do |network, x, t|
     # calculate z of all units
-    z = network.apply_forward(*x)
+    z = network.calculate_z(x)
 
     # calculate delta(error) of output units
     delta = network.calculate_delta(z, t)
@@ -209,6 +211,7 @@ class Network
     @out_list = []
     @forward_prop = nil
     @backward_prop = nil
+    @softmax_output = false
   end
 
   def append_unit(list)
@@ -232,10 +235,18 @@ class Network
     append_unit in_list
   end
 
+  # set output units
   def out=(out_list)
     @out_list = out_list
+    n_softmax = 0
     out_list.each do |unit|
       raise "There is a output unit without link." unless @units.include?(unit)
+      n_softmax += 1 if unit.instance_of?(SoftMaxUnit)
+    end
+    if n_softmax == out_list.length
+      @softmax_output = true
+    elsif n_softmax > 0
+      raise "All output units must be SoftMaxUnit"
     end
   end
 
@@ -297,7 +308,11 @@ class Network
     @backward_prop
   end
 
-  def apply_forward(*params)
+  def apply(*params)
+    calculate_z(params, true)
+  end
+
+  def calculate_z(params, output_unit_array=false)
     raise "not equal # of parameters to # of input units" if params.length != @in_list.length
 
     values = Hash.new
@@ -315,12 +330,20 @@ class Network
       end
       values[unit] = unit.activation_func(a)
     end
-    values
-  end
 
-  def apply(*params)
-    values = apply_forward(*params)
-    @out_list.map{|unit| values[unit]}
+    if @softmax_output
+      max_a = @out_list.map{|unit| values[unit]}.max # prevent from overflow
+      sum_exp_a = 0
+      exp_as = @out_list.map{|unit| sum_exp_a += (e=Math.exp(values[unit] - max_a)); e}
+      if output_unit_array
+        return exp_as.map{|e| e / sum_exp_a}
+      else
+        @out_list.each_with_index{|unit, i| values[unit] = exp_as[i] / sum_exp_a }
+      end
+    elsif output_unit_array
+      return @out_list.map{|unit| values[unit]}
+    end
+    values
   end
 
   def calculate_delta(z, t)

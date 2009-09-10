@@ -45,25 +45,55 @@ end
 # units
 in_units = (1..(28*28)).map{|i| Unit.new("x#{i}")}
 bias = [BiasUnit.new("1")]
-hiddenunits = (1..300).map{|i| TanhUnit.new("z#{i}")}
-out_unit = (1..10).map{|i| SigUnit.new("y#{i}")}
+hiddenunits = (1..100).map{|i| TanhUnit.new("z#{i}")}
+out_unit = (1..10).map{|i| SoftMaxUnit.new("y#{i}")}
 
 # network
-network = Network.new(:error_func=>ErrorFunction::CrossEntropy) # ErrorFunction::SoftMax
+network = Network.new(:error_func=>ErrorFunction::SoftMax)
 network.in  = in_units
 network.link in_units + bias, hiddenunits
 network.link hiddenunits + bias, out_unit
 network.out = out_unit
 
-eta = 0.1
-  images.each_with_index do |image, idx|
-    image = image.unpack('C*')
+# training
+N_IMAGES = 100
+10.times do |n|
+  eta = if n<2 then 0.1 elsif n<5 then 0.05 else 0.01 end
+  (0..(N_IMAGES-1)).sort_by{rand}.each do |idx|
+    image = images[idx].unpack('C*')
     target = [0]*10
     target[labels[idx]] = 1
-    grad = network.gradient_E(image, target)
+
+    puts "(#{n+1}, #{idx}): correct: #{labels[idx]}"
+    puts "#{network.apply(*image).map{|x| (x*10000).floor/10000.0}.inspect}, e=#{(network.error_function(image, target)*1000)/1000.0}"
+
+    grad = Gradient::BackPropagate.call(network, image, target)
     network.weights.descent eta, grad
-    puts idx
+
+    puts "#{network.apply(*image).map{|x| (x*10000).floor/10000.0}.inspect}, e=#{(network.error_function(image, target)*1000)/1000.0}"
   end
+end
+
+# test
+puts "------------------------------"
+correct = mistake = 0
+(0..(N_IMAGES*2-1)).each do |idx|
+  image = images[idx].unpack('C*')
+  target = [0]*10
+  target[labels[idx]] = 1
+
+  y = network.apply(*image)
+  predict = (0..9).max_by{|i| y[i]}
+  puts "#{idx}: predict = #{predict}, expect = #{labels[idx]}"
+  puts "#{y.map{|x| (x*10000).floor/10000.0}.inspect}, e=#{(network.error_function(image, target)*1000)/1000.0}"
+  if labels[idx] == predict
+    correct += 1
+  else
+    mistake += 1
+  end
+end
+
+puts "correct = #{correct}, mistake = #{mistake}, rate = #{(correct.to_f/(correct+mistake)*10000).floor/100.0}%"
 
 
 
