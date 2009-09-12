@@ -15,6 +15,7 @@ class BiasUnit < Unit
 end
 class IdentityUnit < Unit
   def formula_name; ""; end
+  def act_func_temp(a); a; end
   def activation_func(a)
     a
   end
@@ -26,6 +27,7 @@ class SoftMaxUnit < IdentityUnit
 end
 class TanhUnit < Unit
   def formula_name; "tanh"; end
+  def act_func_temp(a); "Math.tanh(#{a})"; end
   def activation_func(a)
     Math.tanh(a)
   end
@@ -36,6 +38,7 @@ class TanhUnit < Unit
 end
 class SigUnit < Unit
   def formula_name; "sig"; end
+  def act_func_temp(a); "1.0/(1+Math.exp(-(#{a})))"; end
   def activation_func(a)
     1.0/(1+Math.exp(-a))
   end
@@ -43,9 +46,6 @@ class SigUnit < Unit
     z*(1-z)
   end
 end
-
-def tanh(a); Math.tanh(a); end
-def sig(a); 1.0/(1+Math.exp(-a)); end
 
 
 # error function
@@ -214,12 +214,10 @@ class Network
   def initialize(opt={})
     @error_func = opt[:error_func] || ErrorFunction::SquaresSum
     @gradient = opt[:gradient] || Gradient::BackPropagate
-    @code_generate = opt[:code_generate]
     @units = []
     @weights = Weights.new
     @in_list = []
     @out_list = []
-    @forward_prop = nil
     @backward_prop = nil
     @softmax_output = false
   end
@@ -258,6 +256,9 @@ class Network
     elsif n_softmax > 0
       raise "All output units must be SoftMaxUnit"
     end
+
+    # code generator
+    generated_forward_prop
   end
 
   def arrange_forward
@@ -284,45 +285,58 @@ class Network
     arranged
   end
 
-  def forward_prop
-    @forward_prop = arrange_forward unless @forward_prop
-    @forward_prop
-  end
+  def generated_forward_prop
+    proc = []
+    proc << "Proc.new do |network, params|"
+    proc << "w_=network.weights.parameters"
+    proc << "r_=Array.new(#{@units.length})"
 
-  def generated_forward_prop(params)
-    unless @generated_forward_prop
-      proc = []
-      proc << "Proc.new do |network, params|"
-      proc << "w_=network.weights.parameters"
-      proc << "r_=Array.new(#{@units.length})"
-
-      unit_index = Hash.new
-      @units.each_with_index do |u, i|
-        proc << "r_[#{i}]=1" if u.instance_of?(BiasUnit)
-        unit_index[u] = i
-      end
-
-      @in_list.each_with_index do |unit, i|
-        proc << "r_[#{unit_index[unit]}]=#{unit.name}=params[#{i}]"
-      end
-
-      forward_prop.each do |unit|
-        forms = []
-        @weights.each_in_units_index(unit) do |u, i|
-          if u.instance_of?(BiasUnit)
-            forms << "w_[#{i}]"
-          else
-            forms << "w_[#{i}]*#{u.name}"
-          end
-        end
-        proc << "r_[#{unit_index[unit]}]=#{unit.name}=#{unit.formula_name}(#{forms.join("+")})"
-      end
-      proc << "r_"
-      proc << "end"
-      #puts proc.join("\n")
-      @generated_forward_prop = eval(proc.join("\n"))
+    unit_index = Hash.new
+    @units.each_with_index do |u, i|
+      proc << "r_[#{i}]=1" if u.instance_of?(BiasUnit)
+      unit_index[u] = i
     end
-    @generated_forward_prop.call(self, params)
+
+    @in_list.each_with_index do |unit, i|
+      proc << "r_[#{unit_index[unit]}]=#{unit.name}=params[#{i}]"
+    end
+
+    arrange_forward.each do |unit|
+      forms = []
+      @weights.each_in_units_index(unit) do |u, i|
+        if u.instance_of?(BiasUnit)
+          forms << "w_[#{i}]"
+        else
+          forms << "w_[#{i}]*#{u.name}"
+        end
+      end
+      proc << "r_[#{unit_index[unit]}]=#{unit.name}=#{unit.act_func_temp(forms.join("+"))}"
+    end
+
+    if @softmax_output
+      proc << "max_a=[#{@out_list.map{|unit| unit.name}.join(',')}].max"
+      proc << "sum_exp_a=0"
+      @out_list.each do |unit|
+        proc << "e_#{unit.name}=Math.exp(#{unit.name}-max_a)"
+        proc << "sum_exp_a+=e_#{unit.name}"
+      end
+      @out_list.each do |unit|
+        proc << "r_[#{unit_index[unit]}]=e_#{unit.name}/sum_exp_a"
+      end
+    end
+
+    proc << "r_"
+    proc << "end"
+    #puts proc.join("\n")
+    @forward_prop = eval(proc.join("\n"))
+
+    # extract output units
+    proc = []
+    proc << "Proc.new do |z|"
+    proc << "z[#{unit_index[@out_list[0]]},#{@out_list.length}]"
+    proc << "end"
+    #puts proc.join("\n")
+    @extract_output = eval(proc.join("\n"))
   end
 
   def arrange_backward
@@ -361,40 +375,15 @@ class Network
   def calculate_z(params, output_unit_array=false)
     raise "not equal # of parameters to # of input units" if params.length != @in_list.length
 
-    values = Hash.new
-    if @code_generate
-      z = generated_forward_prop(params)
-      @units.each_with_index {|unit, i| values[unit] = z[i]}
+    z = @forward_prop.call(self, params)
+
+    if output_unit_array
+      return @extract_output.call(z)
     else
-      @units.each do |unit|
-        values[unit] = 1 if unit.instance_of?(BiasUnit)
-      end
-      @in_list.each_with_index do |unit, i|
-        values[unit] = params[i]
-      end
-
-      forward_prop.each do |unit|
-        a = 0
-        @weights.each_in_units(unit) do |z, w|
-          a += w * values[z]
-        end
-        values[unit] = unit.activation_func(a)
-      end
+      values = Hash.new
+      @units.each_with_index {|unit, i| values[unit] = z[i]}
+      values
     end
-
-    if @softmax_output
-      max_a = @out_list.map{|unit| values[unit]}.max # prevent from overflow
-      sum_exp_a = 0
-      exp_as = @out_list.map{|unit| sum_exp_a += (e=Math.exp(values[unit] - max_a)); e}
-      if output_unit_array
-        return exp_as.map{|e| e / sum_exp_a}
-      else
-        @out_list.each_with_index{|unit, i| values[unit] = exp_as[i] / sum_exp_a }
-      end
-    elsif output_unit_array
-      return @out_list.map{|unit| values[unit]}
-    end
-    values
   end
 
   def calculate_delta(z, t)

@@ -41,6 +41,6 @@ sum_e = 999999
 end
 network.weights.dump
 
-puts "#{network.apply(0, 0)}, #{network.apply(1, 1)}"
-puts "#{network.apply(0, 1)}, #{network.apply(1, 0)}"
+puts "(0, 0) => #{network.apply(0, 0)}, (1, 1) => #{network.apply(1, 1)}"
+puts "(0, 1) => #{network.apply(0, 1)}, (1, 0) => #{network.apply(1, 0)}"
 
