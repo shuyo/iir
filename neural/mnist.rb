@@ -45,7 +45,7 @@ end
 # units
 in_units = (1..(28*28)).map{|i| Unit.new("x#{i}")}
 bias = [BiasUnit.new("1")]
-hiddenunits = (1..100).map{|i| TanhUnit.new("z#{i}")}
+hiddenunits = (1..300).map{|i| TanhUnit.new("z#{i}")}
 out_unit = (1..10).map{|i| SoftMaxUnit.new("y#{i}")}
 
 # network
@@ -56,7 +56,8 @@ network.link hiddenunits + bias, out_unit
 network.out = out_unit
 
 # training
-N_IMAGES = 100
+t1 = Time.now.to_f
+N_IMAGES = 10
 10.times do |n|
   eta = if n<2 then 0.1 elsif n<5 then 0.05 else 0.01 end
   (0..(N_IMAGES-1)).sort_by{rand}.each do |idx|
@@ -65,14 +66,15 @@ N_IMAGES = 100
     target[labels[idx]] = 1
 
     puts "(#{n+1}, #{idx}): correct: #{labels[idx]}"
-    puts "#{network.apply(*image).map{|x| (x*10000).floor/10000.0}.inspect}, e=#{(network.error_function(image, target)*1000)/1000.0}"
+    #puts "#{network.apply(*image).map{|x| (x*10000).floor/10000.0}.inspect}, e=#{(network.error_function(image, target)*1000)/1000.0}"
 
     grad = Gradient::BackPropagate.call(network, image, target)
     network.weights.descent eta, grad
 
-    puts "#{network.apply(*image).map{|x| (x*10000).floor/10000.0}.inspect}, e=#{(network.error_function(image, target)*1000)/1000.0}"
+    #puts "#{network.apply(*image).map{|x| (x*10000).floor/10000.0}.inspect}, e=#{(network.error_function(image, target)*1000)/1000.0}"
   end
 end
+t2 = Time.now.to_f
 
 # test
 puts "------------------------------"
@@ -92,8 +94,12 @@ correct = mistake = 0
     mistake += 1
   end
 end
+t3 = Time.now.to_f
 
+#
 puts "correct = #{correct}, mistake = #{mistake}, rate = #{(correct.to_f/(correct+mistake)*10000).floor/100.0}%"
 
+puts "learning: #{t2-t1}"
+puts "testing: #{t3-t2}"
 
 

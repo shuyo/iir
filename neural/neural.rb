@@ -15,36 +15,20 @@ class BiasUnit < Unit
 end
 class IdentityUnit < Unit
   def formula_name; ""; end
-  def act_func_temp(a); a; end
-  def activation_func(a)
-    a
-  end
-  def divback(z)
-    1
-  end
+  def activation_func(a); a; end
+  def divback(z); "1"; end
 end
 class SoftMaxUnit < IdentityUnit
 end
 class TanhUnit < Unit
   def formula_name; "tanh"; end
-  def act_func_temp(a); "Math.tanh(#{a})"; end
-  def activation_func(a)
-    Math.tanh(a)
-  end
-  # divergence for backward
-  def divback(z)
-    1-z*z
-  end
+  def activation_func(a); "Math.tanh(#{a})"; end
+  def divback(z); "(1-#{z}**2)"; end
 end
 class SigUnit < Unit
   def formula_name; "sig"; end
-  def act_func_temp(a); "1.0/(1+Math.exp(-(#{a})))"; end
-  def activation_func(a)
-    1.0/(1+Math.exp(-a))
-  end
-  def divback(z)
-    z*(1-z)
-  end
+  def activation_func(a); "1.0/(1+Math.exp(-(#{a})))"; end
+  def divback(z); "(_z=#{z})*(1-_z)"; end
 end
 
 
@@ -100,21 +84,8 @@ module Gradient
     # calculate delta(error) of output units
     delta = network.calculate_delta(z, t)
 
-    # calculate delta(error) of hidden units
-    network.backward_prop.each do |unit|
-      d = 0
-      network.weights.each_out_units(unit) do |out_unit, w_kj|
-        d += w_kj * delta[out_unit]
-      end
-      delta[unit] = unit.divback(z[unit]) * d
-    end
-
     # calculate difference of all weights
-    g = []
-    network.weights.each_from_to do |from, to|
-      g << delta[to] * z[from]
-    end
-    g
+    network.calculate_back_gradient(z, delta)
   end
 end
 
@@ -151,17 +122,12 @@ class Weights
   end
   def each_in_units(out_unit)
     @map_to_index[out_unit].each do |i|
-      yield @from_units[i], @parameters[i]
-    end
-  end
-  def each_in_units_index(out_unit)
-    @map_to_index[out_unit].each do |i|
       yield @from_units[i], i
     end
   end
   def each_out_units(in_unit)
     @map_from_index[in_unit].each do |i|
-      yield @to_units[i], @parameters[i]
+      yield @to_units[i], i
     end
   end
   def out_units(in_unit)
@@ -189,7 +155,7 @@ class Weights
   end
   def each_from_to
     @from_units.each_with_index do |from, i|
-      yield from, @to_units[i]
+      yield from, @to_units[i], i
     end
   end
   def dump
@@ -215,6 +181,7 @@ class Network
     @error_func = opt[:error_func] || ErrorFunction::SquaresSum
     @gradient = opt[:gradient] || Gradient::BackPropagate
     @units = []
+    @unit_index = Hash.new
     @weights = Weights.new
     @in_list = []
     @out_list = []
@@ -224,7 +191,10 @@ class Network
 
   def append_unit(list)
     list.each do |unit|
-      @units << unit unless @units.include?(unit)
+      unless @unit_index.key?(unit)
+        @unit_index[unit] = @units.length
+        @units << unit
+      end
     end
   end
 
@@ -259,6 +229,7 @@ class Network
 
     # code generator
     generated_forward_prop
+    generate_calculate_delta
   end
 
   def arrange_forward
@@ -291,26 +262,24 @@ class Network
     proc << "w_=network.weights.parameters"
     proc << "r_=Array.new(#{@units.length})"
 
-    unit_index = Hash.new
     @units.each_with_index do |u, i|
       proc << "r_[#{i}]=1" if u.instance_of?(BiasUnit)
-      unit_index[u] = i
     end
 
     @in_list.each_with_index do |unit, i|
-      proc << "r_[#{unit_index[unit]}]=#{unit.name}=params[#{i}]"
+      proc << "r_[#{@unit_index[unit]}]=#{unit.name}=params[#{i}]"
     end
 
     arrange_forward.each do |unit|
       forms = []
-      @weights.each_in_units_index(unit) do |u, i|
+      @weights.each_in_units(unit) do |u, i|
         if u.instance_of?(BiasUnit)
           forms << "w_[#{i}]"
         else
           forms << "w_[#{i}]*#{u.name}"
         end
       end
-      proc << "r_[#{unit_index[unit]}]=#{unit.name}=#{unit.act_func_temp(forms.join("+"))}"
+      proc << "r_[#{@unit_index[unit]}]=#{unit.name}=#{unit.activation_func(forms.join("+"))}"
     end
 
     if @softmax_output
@@ -321,7 +290,7 @@ class Network
         proc << "sum_exp_a+=e_#{unit.name}"
       end
       @out_list.each do |unit|
-        proc << "r_[#{unit_index[unit]}]=e_#{unit.name}/sum_exp_a"
+        proc << "r_[#{@unit_index[unit]}]=e_#{unit.name}/sum_exp_a"
       end
     end
 
@@ -333,10 +302,45 @@ class Network
     # extract output units
     proc = []
     proc << "Proc.new do |z|"
-    proc << "z[#{unit_index[@out_list[0]]},#{@out_list.length}]"
+    proc << "z[#{@unit_index[@out_list[0]]},#{@out_list.length}]"
     proc << "end"
     #puts proc.join("\n")
     @extract_output = eval(proc.join("\n"))
+  end
+
+  def generate_calculate_delta
+    proc = []
+    proc << "Proc.new do |network, z, t|"
+    proc << "w_=network.weights.parameters"
+    proc << "d_=Array.new(#{@units.length})"
+
+    @out_list.each_with_index do |unit, i|
+      proc << "d_[#{@unit_index[unit]}]=z[#{@unit_index[unit]}]-t[#{i}]"
+    end
+
+    backward_prop.each do |unit|
+      sum = []
+      @weights.each_out_units(unit) do |out_unit, i|
+        sum << "w_[#{i}]*d_[#{@unit_index[out_unit]}]"
+      end
+      idx = @unit_index[unit]
+      proc << "d_[#{idx}]=#{unit.divback("z[#{idx}]")}*(#{sum.join('+')})"
+    end
+    proc << "d_"
+    proc << "end"
+    #puts proc.join("\n")
+    @calculate_delta = eval(proc.join("\n"))
+
+    proc = []
+    proc << "Proc.new do |network, z, d|"
+    proc << "g=Array.new(#{@weights.size})"
+    @weights.each_from_to do |from, to, i|
+      proc << "g[#{i}]=d[#{@unit_index[to]}]*z[#{@unit_index[from]}]"
+    end
+    proc << "g"
+    proc << "end"
+    #puts proc.join("\n")
+    @calculate_back_gradient = eval(proc.join("\n"))
   end
 
   def arrange_backward
@@ -378,20 +382,18 @@ class Network
     z = @forward_prop.call(self, params)
 
     if output_unit_array
-      return @extract_output.call(z)
+      @extract_output.call(z)
     else
-      values = Hash.new
-      @units.each_with_index {|unit, i| values[unit] = z[i]}
-      values
+      z
     end
   end
 
+  def calculate_back_gradient(z, delta)
+    @calculate_back_gradient.call(self, z, delta)
+  end
+
   def calculate_delta(z, t)
-    delta = Hash.new
-    @out_list.each_with_index do |unit, i|
-      delta[unit] = z[unit] - t[i]
-    end
-    delta
+    @calculate_delta.call(self, z, t)
   end
 
   def error_function(x, t)
