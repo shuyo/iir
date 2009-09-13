@@ -1,6 +1,5 @@
 #!/usr/bin/ruby
 
-OUTPUT_CODE = false
 class Unit
   def initialize(name=nil)
     @name = name
@@ -113,6 +112,11 @@ class Weights
     @to_units = []
     @map_to_index = Hash.new
     @map_from_index = Hash.new
+  end
+
+  # initialise all parameter randomizely
+  def init_parameters
+    @orig_parameters = @parameters = (1..@parameters.length).map{normrand(0, 1)}
   end
 
   def append_unit_index(from, to, weight_index)
@@ -389,7 +393,7 @@ class Network
 
     proc << "r_"
     proc << "end"
-    puts proc.join("\n") if OUTPUT_CODE
+    puts proc.join("\n") if Object.const_defined?(:OUTPUT_CODE) && OUTPUT_CODE
     @forward_prop = eval(proc.join("\n"))
 
     # extract output units
@@ -397,7 +401,7 @@ class Network
     proc << "Proc.new do |z|"
     proc << "z[#{@unit_index[@out_list[0]]},#{@out_list.length}]"
     proc << "end"
-    #puts proc.join("\n") if OUTPUT_CODE
+    #puts proc.join("\n") if Object.const_defined?(:OUTPUT_CODE) && OUTPUT_CODE
     @extract_output = eval(proc.join("\n"))
   end
 
@@ -421,11 +425,11 @@ class Network
     end
     proc << "d_"
     proc << "end"
-    puts proc.join("\n") if OUTPUT_CODE
+    puts proc.join("\n") if Object.const_defined?(:OUTPUT_CODE) && OUTPUT_CODE
     @calculate_delta = eval(proc.join("\n"))
 
     proc = []
-    proc << "Proc.new do |network, z, d|"
+    proc << "Proc.new do |z, d|"
     proc << "g=Array.new(#{@weights.size})"
     @weights.each_from_to do |from, to, i|
       if from.is_a?(Unit)
@@ -442,7 +446,7 @@ class Network
     end
     proc << "g"
     proc << "end"
-    puts proc.join("\n") if OUTPUT_CODE
+    puts proc.join("\n") if Object.const_defined?(:OUTPUT_CODE) && OUTPUT_CODE
     @calculate_back_gradient = eval(proc.join("\n"))
   end
 
@@ -492,7 +496,7 @@ class Network
   end
 
   def calculate_back_gradient(z, delta)
-    @calculate_back_gradient.call(self, z, delta)
+    @calculate_back_gradient.call(z, delta)
   end
 
   def calculate_delta(z, t)

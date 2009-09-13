@@ -1,6 +1,7 @@
 #!/usr/bin/ruby
 
 require "neural.rb"
+OUTPUT_CODE = true
 
 # training data
 D = [
