@@ -23,7 +23,7 @@ end
 
 # units
 in_units = (1..(28*28)).map{|i| Unit.new("x#{i}")}
-convolutions = (1..(24*24)).map{|i| IdentityUnit.new("x#{i}")}
+convolutions = (1..(24*24)).map{|i| IdentityUnit.new("c#{i}")}
 hiddenunits = (1..60).map{|i| TanhUnit.new("z#{i}")}
 out_unit = (1..10).map{|i| SoftMaxUnit.new("y#{i}")}
 
@@ -37,8 +37,8 @@ network.out = out_unit
 
 # training
 t1 = Time.now.to_f
-N_IMAGES = 500
-10.times do |n|
+N_IMAGES = 50
+6.times do |n|
   eta = if n<2 then 0.1 elsif n<5 then 0.05 else 0.01 end
   (0..(N_IMAGES-1)).sort_by{rand}.each do |idx|
     image = images[idx].unpack('C*')
