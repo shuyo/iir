@@ -1,5 +1,6 @@
 #!/usr/bin/ruby
 
+OUTPUT_CODE = false
 class Unit
   def initialize(name=nil)
     @name = name
@@ -89,6 +90,21 @@ module Gradient
   end
 end
 
+# convolutional layer
+class Convoluter
+  def initialize(weights, weights_offset, size)
+    @weights = weights
+    @weights_offset = weights_offset
+    @size = size
+  end
+  def append(from_list, to)
+    raise "# of preceding units which append into convoluter must equal to #@size" if from_list.length != @size
+    from_list.each_with_index do |from, i|
+      @weights.append from, to, @weights_offset + i
+    end
+  end
+end
+
 # weight parameters
 class Weights
   def initialize
@@ -98,45 +114,96 @@ class Weights
     @map_to_index = Hash.new
     @map_from_index = Hash.new
   end
-  def append(from, to)
-    @map_to_index[to] ||= []
-    @map_to_index[to] << @parameters.length
-    @map_from_index[from] ||= []
-    @map_from_index[from] << @parameters.length
 
-    @parameters << normrand(0, 1)
-    @from_units << from
-    @to_units << to
+  def append_unit_index(from, to, weight_index)
+    @map_from_index[from] ||= []
+    @map_from_index[from] << weight_index if !@map_from_index[from].include?(weight_index)
+    @map_to_index[to] ||= []
+    @map_to_index[to] << weight_index if !@map_to_index.include?(weight_index)
   end
+
+  def append(from, to, weight_index=@parameters.length)
+    append_unit_index from, to, weight_index
+    if weight_index == @parameters.length
+      @parameters << normrand(0, 1)
+      @from_units << from
+      @to_units << to
+    elsif weight_index < @parameters.length
+      @from_units[weight_index] << from
+      @to_units[weight_index] << to
+    else
+      raise "weight_index is illegal number."
+    end
+  end
+  def start_convolution(size)
+    weights_offset = @parameters.length
+    size.times do
+      @parameters << normrand(0, 1)
+      @from_units << []
+      @to_units << []
+    end
+    Convoluter.new(self, weights_offset, size)
+  end
+
   def normrand(m=0, s=1)
     r=0
     12.times{ r+=rand() }
     (r - 6) * s + m
   end
+
+  def calculatable(unit, calcurated_map)
+    @map_to_index[unit].each do |i|
+      froms = @from_units[i]
+      if froms.is_a?(Unit)
+        return false if !calcurated_map.key?(froms)
+      elsif froms.instance_of?(Array)
+        froms.each do |from|
+          return false if !calcurated_map.key?(from)
+        end
+      else
+        raise "bug #{froms.inspect}"
+      end
+    end
+    return true
+  end
+  def calculatable_backward(unit, calcurated_map)
+    @map_from_index[unit].each do |i|
+      tos = @to_units[i]
+      if tos.is_a?(Unit)
+        return false if !calcurated_map.key?(tos)
+      elsif tos.instance_of?(Array)
+        tos.each do |to|
+          return false if !calcurated_map.key?(to)
+        end
+      else
+        raise "bug #{tos.inspect}"
+      end
+    end
+    return true
+  end
+
   def in_units(out_unit)
     in_list = Hash.new
-    @map_to_index[out_unit].each do |i|
-      in_list[@from_units[i]] = @parameters[i]
-    end
     in_list
   end
   def each_in_units(out_unit)
     @map_to_index[out_unit].each do |i|
-      yield @from_units[i], i
+      froms = @from_units[i]
+      if froms.is_a?(Unit)
+        yield froms, i
+      elsif froms.instance_of?(Array)
+        yield froms[@to_units[i].index(out_unit)], i
+      else
+        raize "bug"
+      end
     end
   end
   def each_out_units(in_unit)
     @map_from_index[in_unit].each do |i|
-      yield @to_units[i], i
+      yield @to_units[i], i #TODO
     end
   end
-  def out_units(in_unit)
-    out_list = Hash.new
-    @map_from_index[in_unit].each do |i|
-      out_list[@to_units[i]] = @parameters[i]
-    end
-    out_list
-  end
+
   def back_to_orig
     @parameters = @orig_parameters
   end
@@ -154,8 +221,8 @@ class Weights
     @parameters
   end
   def each_from_to
-    @from_units.each_with_index do |from, i|
-      yield from, @to_units[i], i
+    @from_units.each_with_index do |from, i| #TODO
+      yield from, @to_units[i], i #TODO
     end
   end
   def dump
@@ -177,6 +244,7 @@ end
 
 # neural network
 class Network
+  BIAS = [BiasUnit.new("1")]
   def initialize(opt={})
     @error_func = opt[:error_func] || ErrorFunction::SquaresSum
     @gradient = opt[:gradient] || Gradient::BackPropagate
@@ -198,7 +266,33 @@ class Network
     end
   end
 
-  def link(from_list, to_list)
+  def convolutional_link(from_list, to_list, w, h, csize)
+    w_conv_layer = w - csize + 1
+    raise "# of units of layer preceding convolutional layer doesn't equal to width(#{w})*height(#{h})" if from_list.length != w*h
+    raise "# of units of convolutional layer must equal to #{w_conv_layer}*#{h-csize+1}" if to_list.length != w_conv_layer*(h-csize+1)
+
+    append_unit BIAS
+    append_unit from_list
+    append_unit to_list
+    
+    convoluter = @weights.start_convolution(csize*csize+1)
+    to_list.each_with_index do |to, i|
+      x_offset = i % w_conv_layer
+      y_offset = i / w_conv_layer
+      #puts "#{i}: (#{x_offset}, #{y_offset})"
+      preceding_units = []
+      csize.times do |j|
+        preceding_units += from_list[w*(y_offset+j)+x_offset, csize]
+      end
+      raise "bug" if preceding_units.length != csize*csize
+      convoluter.append preceding_units + BIAS, to
+    end
+    from_list.each do |from|
+    end
+  end
+
+  def link(_from_list, to_list)
+    from_list = _from_list + BIAS
     append_unit from_list
     append_unit to_list
     from_list.each do |from|
@@ -243,8 +337,7 @@ class Network
       advance = false
       @units.each do |unit|
         next if calcurated.key?(unit)
-        in_list = @weights.in_units(unit)
-        if in_list.keys.all?{|z| calcurated.key?(z)}
+        if @weights.calculatable(unit, calcurated)
           arranged << unit
           calcurated[unit] = 1
           advance = true
@@ -296,7 +389,7 @@ class Network
 
     proc << "r_"
     proc << "end"
-    #puts proc.join("\n")
+    puts proc.join("\n") if OUTPUT_CODE
     @forward_prop = eval(proc.join("\n"))
 
     # extract output units
@@ -304,7 +397,7 @@ class Network
     proc << "Proc.new do |z|"
     proc << "z[#{@unit_index[@out_list[0]]},#{@out_list.length}]"
     proc << "end"
-    #puts proc.join("\n")
+    #puts proc.join("\n") if OUTPUT_CODE
     @extract_output = eval(proc.join("\n"))
   end
 
@@ -328,18 +421,28 @@ class Network
     end
     proc << "d_"
     proc << "end"
-    #puts proc.join("\n")
+    puts proc.join("\n") if OUTPUT_CODE
     @calculate_delta = eval(proc.join("\n"))
 
     proc = []
     proc << "Proc.new do |network, z, d|"
     proc << "g=Array.new(#{@weights.size})"
     @weights.each_from_to do |from, to, i|
-      proc << "g[#{i}]=d[#{@unit_index[to]}]*z[#{@unit_index[from]}]"
+      if from.is_a?(Unit)
+        proc << "g[#{i}]=d[#{@unit_index[to]}]*z[#{@unit_index[from]}]"
+      elsif from.instance_of?(Array)
+        buf = []
+        from.each_with_index do |f, i|
+          buf << "d[#{@unit_index[to[i]]}]*z[#{@unit_index[f]}]"
+        end
+        proc << "g[#{i}]=#{buf.join('+')}"
+      else
+        raise "bug"
+      end
     end
     proc << "g"
     proc << "end"
-    #puts proc.join("\n")
+    puts proc.join("\n") if OUTPUT_CODE
     @calculate_back_gradient = eval(proc.join("\n"))
   end
 
@@ -354,8 +457,8 @@ class Network
       advance = false
       @units.each do |unit|
         next if calcurated.key?(unit) || unit.instance_of?(BiasUnit) || @in_list.include?(unit)
-        out_list = @weights.out_units(unit)
-        if out_list.keys.all?{|z| calcurated.key?(z)}
+
+        if @weights.calculatable_backward(unit, calcurated)
           arranged << unit
           calcurated[unit] = 1
           advance = true

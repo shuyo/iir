@@ -13,15 +13,14 @@ D = [
 
 # units
 in_unit = [Unit.new("x1")]
-bias = [BiasUnit.new("1")]
 hiddenunits = [TanhUnit.new("z1"), TanhUnit.new("z2"), TanhUnit.new("z3"), TanhUnit.new("z4")]
 out_unit = [IdentityUnit.new("y1")]
 
 # network
 network = Network.new
 network.in  = in_unit
-network.link in_unit + bias, hiddenunits
-network.link hiddenunits + bias, out_unit
+network.link in_unit, hiddenunits
+network.link hiddenunits, out_unit
 network.out = out_unit
 
 eta = 0.1

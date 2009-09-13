@@ -11,15 +11,16 @@ end
 
 # units
 in_units = [Unit.new("x1"), Unit.new("x2")]
-bias = [BiasUnit.new("1")]
-hiddenunits = (1..6).map{|i| TanhUnit.new("z#{i}")}
+hiddenunits = (1..6).map{|i| TanhUnit.new("z1#{i}")}
+hiddenunits2 = (1..6).map{|i| TanhUnit.new("z2#{i}")}
 out_unit = [SigUnit.new("y1")]
 
 # network
 network = Network.new(:error_func=>ErrorFunction::CrossEntropy, :code_generate=>true)
 network.in  = in_units
-network.link in_units + bias, hiddenunits
-network.link hiddenunits + bias, out_unit
+network.link in_units, hiddenunits
+network.link hiddenunits, hiddenunits2
+network.link hiddenunits2, out_unit
 network.out = out_unit
 
 eta = 0.1

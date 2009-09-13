@@ -12,15 +12,14 @@ D = [
 
 # units
 in_units = [Unit.new("x1"), Unit.new("x2")]
-bias = [BiasUnit.new("1")]
 hiddenunits = [TanhUnit.new("z1"), TanhUnit.new("z2"), TanhUnit.new("z3"), TanhUnit.new("z4")]
 out_unit = [SigUnit.new("y1")]
 
 # network
-network = Network.new(:error_func=>ErrorFunction::CrossEntropy, :code_generate=>true)
+network = Network.new(:error_func=>ErrorFunction::CrossEntropy)
 network.in  = in_units
-network.link in_units + bias, hiddenunits
-network.link hiddenunits + bias, out_unit
+network.link in_units, hiddenunits
+network.link hiddenunits, out_unit
 network.out = out_unit
 
 eta = 0.1

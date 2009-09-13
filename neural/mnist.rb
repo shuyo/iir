@@ -44,20 +44,19 @@ end
 
 # units
 in_units = (1..(28*28)).map{|i| Unit.new("x#{i}")}
-bias = [BiasUnit.new("1")]
-hiddenunits = (1..300).map{|i| TanhUnit.new("z#{i}")}
+hiddenunits = (1..100).map{|i| TanhUnit.new("z#{i}")}
 out_unit = (1..10).map{|i| SoftMaxUnit.new("y#{i}")}
 
 # network
 network = Network.new(:error_func=>ErrorFunction::SoftMax, :code_generate=>true)
 network.in  = in_units
-network.link in_units + bias, hiddenunits
-network.link hiddenunits + bias, out_unit
+network.link in_units, hiddenunits
+network.link hiddenunits, out_unit
 network.out = out_unit
 
 # training
 t1 = Time.now.to_f
-N_IMAGES = 10
+N_IMAGES = 1000
 10.times do |n|
   eta = if n<2 then 0.1 elsif n<5 then 0.05 else 0.01 end
   (0..(N_IMAGES-1)).sort_by{rand}.each do |idx|
