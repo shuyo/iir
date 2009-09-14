@@ -115,8 +115,8 @@ class Weights
   end
 
   # initialise all parameter randomizely
-  def init_parameters
-    @orig_parameters = @parameters = (1..@parameters.length).map{normrand(0, 1)}
+  def init_parameters(m=0, s=1)
+    @orig_parameters = @parameters = (1..@parameters.length).map{normrand(m, s)}
   end
 
   def append_unit_index(from, to, weight_index)
@@ -239,9 +239,9 @@ class Weights
         d[unit] << "#{@parameters[i]} * #{@from_units[i].name}"
       end
     end
-    d.each do |unit, formula|
-      puts "#{unit.name} <- #{unit.formula_name}( #{formula.join(" + ")} );".gsub('+ -','- ')
-    end
+    d.map do |unit, formula|
+      "#{unit.name} <- #{unit.formula_name}( #{formula.join(" + ")} );".gsub('+ -','- ')
+    end.join("\n")
   end
 end
 
