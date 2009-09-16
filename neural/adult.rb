@@ -36,13 +36,13 @@ dataset.each_with_index do |data, idx|
   dataset[idx] = [vector, data[1]]
 end
 
-dataset = dataset[0, 100]
+#dataset = dataset[0, 100]
 
 
 # units
 in_units = (1..dataset[0][0].length).map{|i| Unit.new("x#{i}")}
-hiddenunits1 = (1..30).map{|i| TanhUnit.new("z#{i}")}
-hiddenunits2 = (1..30).map{|i| TanhUnit.new("w#{i}")}
+hiddenunits1 = (1..20).map{|i| TanhUnit.new("z#{i}")}
+#hiddenunits2 = (1..30).map{|i| TanhUnit.new("w#{i}")}
 out_unit = [SigUnit.new("y1")]
 
 # network
@@ -52,20 +52,21 @@ network.link in_units, hiddenunits1
 network.link hiddenunits1, out_unit
 network.out = out_unit
 
+open(LOGFILE, "a") {|f| f.puts "==== start (#{Time.now})" }
 
 max_correct = 0
-1.times do |trial|
+10.times do |trial|
   network.weights.init_parameters
 
   100.times do |tau|
     eta = if tau<10 then 0.1 elsif tau<50 then 0.05 elsif tau<100 then 0.01 else 0.005 end
-    e = 0
+    t = Time.now.to_i
     dataset.sort{rand}.each do |data|
       grad = network.gradient_E(data[0], [data[1]])
       network.weights.descent eta, grad
-      e += network.error_function(data[0], [data[1]])
+      #e += network.error_function(data[0], [data[1]])
     end
-    puts "#{tau} #{e}"
+    puts "#{tau}: #{Time.now.to_i - t}s"
   end
 
   correct = 0
@@ -85,4 +86,5 @@ max_correct = 0
     end
   end
 end
+open(LOGFILE, "a") {|f| f.puts "==== end (#{Time.now})" }
 
