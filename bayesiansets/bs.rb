@@ -1,4 +1,6 @@
 #!/usr/bin/ruby -KN
+# ./bs.rb [corpus file] [query ...]
+
 require '../lib/infinitive.rb'
 INF = Infinitive.new
 
@@ -41,7 +43,7 @@ class BayesianSet
       beta_tild << Math.log(1 + (n - s) / @beta[i])
     end
 
-    @words.map do |w, wordmap|
+    @worddocs.map do |w, docs|
       score = 0
 =begin
       # method of original paper
@@ -51,7 +53,7 @@ class BayesianSet
       end
 =end
       # simple & fast
-      @worddocs[w].each do |j, dummy|
+      docs.each do |j, dummy|
         score += alpha_tild[j] - beta_tild[j]
       end
 
@@ -62,5 +64,12 @@ class BayesianSet
   end
 end
 
-BayesianSet.new(docs, words, worddocs).search(ARGV[1..-1])
+bs = BayesianSet.new(docs, words, worddocs)
+if ARGV.length > 2
+  bs.search(ARGV[1..-1])
+else
+  while input = $stdin.gets
+    bs.search(input.split)
+  end
+end
 
