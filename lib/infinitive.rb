@@ -6,8 +6,11 @@ require 'linguistics'
 Linguistics::use( :en )
 
 class Infinitive
-  @@dir = caller(0)[0].sub(/\/[^\/]*:\d+$/,"")
-  def initialize(inflist_file = "#{@@dir}/inflist.txt", wordbook_file = "#{@@dir}/wordbook.txt")
+  def initialize(inflist_file = nil, wordbook_file = nil)
+    dir = caller(0)[0].sub(/\/[^\/]*:\d+:.+$/,"")
+    inflist_file = "#{dir}/inflist.txt" unless inflist_file
+    wordbook_file = "#{dir}/wordbook.txt" unless wordbook_file
+
     @inflist = Hash.new
     open(inflist_file) do |f|
       while line = f.gets
