@@ -1,24 +1,41 @@
 #!/usr/bin/ruby -KN
-# ./bs.rb [corpus file] [query ...]
+# ./bs.rb [corpus files]
 
-require '../lib/infinitive.rb'
-INF = Infinitive.new
+begin
+  #raise
+  require '../lib/infinitive.rb'
+  INF = Infinitive.new
+rescue
+  module INF
+    def self.infinitive(word)
+      word.downcase
+    end
+  end
+end
 
 docs = Array.new
 words = Hash.new{|h,k| h[k]=Hash.new }
 worddocs = Hash.new{|h,k| h[k]=Hash.new }
-open(ARGV[0]) do |f|
-  while line = f.gets
-    vec = Hash.new(0)
-    doc_id = docs.length
-    line.scan(/[A-Za-z]+/) do |word|
-      infword = INF.infinitive(word)
-      vec[infword] = 1
-      words[infword][word] = 1
-      worddocs[infword][doc_id] = 1
+while filename = ARGV.shift
+  puts "loading: #{filename}"
+  vec = Hash.new(0)
+  doc_id = docs.length
+  open(filename) do |f|
+    while line = f.gets
+      line.scan(/[A-Za-z]+/) do |word|
+        infword = INF.infinitive(word)
+        vec[infword] = 1
+        words[infword][word] = 1
+        worddocs[infword][doc_id] = 1
+      end
+      if vec.size > 100
+        docs << vec
+        doc_id = docs.length
+        vec = Hash.new(0)
+      end
     end
-    docs << vec if vec.size > 0
   end
+  docs << vec if vec.size > 0
 end
 
 class BayesianSet
@@ -65,11 +82,12 @@ class BayesianSet
 end
 
 bs = BayesianSet.new(docs, words, worddocs)
-if ARGV.length > 2
-  bs.search(ARGV[1..-1])
-else
+#if ARGV.length > 1
+#  bs.search(ARGV[1..-1])
+#else
   while input = $stdin.gets
     bs.search(input.split)
+    puts
   end
-end
+#end
 
