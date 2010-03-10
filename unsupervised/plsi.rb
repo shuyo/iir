@@ -2,14 +2,11 @@
 # ./plsi.rb [corpus files]
 
 begin
-  #raise
   require '../lib/infinitive.rb'
   INF = Infinitive.new
 rescue
   module INF
-    def self.infinitive(word)
-      word.downcase
-    end
+    def self.infinitive(word);word.downcase;end
   end
 end
 
@@ -30,7 +27,7 @@ words = Hash.new{|h,k| h[k]=Hash.new(0) }
 worddocs = Hash.new{|h,k| h[k]=Hash.new(0) }
 while filename = ARGV.shift
   puts "loading: #{filename}"
-  texts = open(filename) {|f| f.read }.split(/\n\n\n\n+/)
+  texts = open(filename) {|f| f.read }.split(/\n\n+/)
 
   texts.each_with_index do |text, doc_id|
     vec = Hash.new(0)
@@ -130,13 +127,20 @@ class PLSI
 end
 
 plsi = PLSI.new(docs, words, worddocs)
-40.times{ plsi.stepEM }
+200.times{ plsi.stepEM }
 
 cluster = plsi.max_z_k_w_j
 cluster.each_with_index do |words, k|
-  puts "cluster: #{k}"
-  words.sort_by{|x| -x[1] }[0..9].each do |x|
-    puts "  #{x[0]}: #{(x[1]*10000).to_i/10000.0}"
+  puts "  cluster: #{k}"
+  sep = 1.0
+  output = []
+  words.sort_by{|x| -x[1] }.each do |x|
+    while sep >= x[1]
+      output << (sep*10).round
+      sep -= 0.1
+    end
+    output << x[0]
   end
+  puts output.join(',')
 end
 

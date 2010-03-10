@@ -32,19 +32,22 @@ Zlib::GzipReader.open('word_scores.txt.gz') do |f|
   end
 end
 
-100.times do |k|
-  eta = 1.0/(k+10)
+10000.times do |k|
+  eta = 0.01 #1.0/(k+10)
   e = 0
+  error = 0
   data.sort_by{rand}.each do |user_id, word_id, t|
     z = users[user_id] - words[word_id]
     y = 1.0/(1.0+Math.exp(-z))
     e -= if t==1 then Math.log(y) else Math.log(1-y) end
+    error += 1 if (t==1 && y<0.5) || (t==0 && y>0.5)
 
     grad_e_eta = eta*(y - t)
     users[user_id] -= grad_e_eta
     words[word_id] += grad_e_eta
   end
-  puts "#{k}: #{e}"
+  puts "#{k}: #{error}, #{e}"
+  open(learnfile+".1", 'w'){|f| Marshal.dump([users,words], f) } if (k % 50) == 0
 end
 
 open(learnfile, 'w'){|f| Marshal.dump([users,words], f) }

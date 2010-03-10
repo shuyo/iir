@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 
 require "neural.rb"
-OUTPUT_CODE = true
+OUTPUT_CODE = false
 
 # training data
 D = [
@@ -23,14 +23,15 @@ network.link in_units, hiddenunits
 network.link hiddenunits, out_unit
 network.out = out_unit
 
+t1 = Time.now.to_f
 eta = 0.1
 sum_e = 999999
-1000.times do |tau|
+10000.times do |tau|
   s = 0
   D.each do |data|
     s += network.error_function(data[0], data[1])
   end
-  puts "sum of errors: #{tau} => #{s}"
+  #puts "sum of errors: #{tau} => #{s}"
   break if s > sum_e
   sum_e = s
 
@@ -39,8 +40,11 @@ sum_e = 999999
     network.weights.descent eta, grad
   end
 end
-network.weights.dump
+#network.weights.dump
 
-puts "(0, 0) => #{network.apply(0, 0)}, (1, 1) => #{network.apply(1, 1)}"
-puts "(0, 1) => #{network.apply(0, 1)}, (1, 0) => #{network.apply(1, 0)}"
+t2 = Time.now.to_f
+puts "#{RUBY_VERSION}(#{RUBY_RELEASE_DATE})[#{RUBY_PLATFORM}] #{((t2-t1)*1000).to_i/1000.0} sec"
+
+#puts "(0, 0) => #{network.apply(0, 0)}, (1, 1) => #{network.apply(1, 1)}"
+#puts "(0, 1) => #{network.apply(0, 1)}, (1, 0) => #{network.apply(1, 0)}"
 
