@@ -1,3 +1,5 @@
+# EM algorithm and Online EMA
+
 # Old Faithful dataset を取得して正規化
 data("faithful");
 xx <- scale(faithful, apply(faithful, 2, mean), apply(faithful, 2, sd));
@@ -9,8 +11,9 @@ init_param <- function(K, D) {
 	list(mu = matrix(rnorm(K * D), D), mix = numeric(K)+1/K, sig = sig);
 }
 
-# 多次元正規分布密度関数(パッケージ使えって？)
+# 多次元正規分布密度関数
 dmnorm <- function(x, mu, sig) {
+	cat(sprintf("det(sig) = %1.4f\n", det(sig)));
 	D <- length(mu);
 	1/((2 * pi)^D * sqrt(det(sig))) * exp(- t(x-mu) %*% solve(sig) %*% (x-mu) / 2)[1];
 }
@@ -19,8 +22,8 @@ dmnorm <- function(x, mu, sig) {
 Estep <- function(xx, param) {
 	K <- nrow(param$mu);
 	t(apply(xx, 1, function(x){
-		numer <- sapply(1:K, function(k) {
-			param$mix[k] * dmnorm(x, param$mu[k,], param$sig[[k]])
+		numer <- param$mix * sapply(1:K, function(k) {
+			dmnorm(x, param$mu[k,], param$sig[[k]])
 		});
 		numer / sum(numer);
 	}))
@@ -49,6 +52,7 @@ Mstep <- function(xx, gamma_nk) {
 	list(mu=new_mu, sig=new_sig, mix=new_mix);
 }
 
+# 対数尤度関数
 Likelihood <- function(xx, param) {
 	K <- nrow(param$mu);
 	sum(apply(xx, 1, function(x){
@@ -56,13 +60,54 @@ Likelihood <- function(xx, param) {
 	}))
 }
 
+OnlineEM <- function(xx, m, param) {
+	N <- nrow(xx);
+	K <- nrow(param$mu);
+	cat(sprintf("---- %d: (%1.4f, %1.4f)\n", m, xx[m, 1], xx[m, 2]));
+	new_gamma <- param$mix * sapply(1:K, function(k) {
+		print(param$mix[k]);
+		print(param$mu[k,]);
+		print(param$sig[[k]]);
+		dmnorm(xx[m, ], param$mu[k,], param$sig[[k]]);
+	});
+	print(new_gamma);
+	new_gamma <- new_gamma / sum(new_gamma);
+	delta <- new_gamma - param$gamma[m,];
+	param$gamma[m,] <- new_gamma;
 
+	cat(sprintf("new_gamma: %1.3f %1.3f\n", new_gamma[1], new_gamma[2]));
+	cat(sprintf("delta: %1.3f %1.3f\n", delta[1], delta[2]));
+	param$mix <- param$mix + delta / N;
+	N_k <- param$mix * N;
+	for(k in 1:K) {
+		x <- xx[m,] - param$mu[k,];
+		d <- delta[k] / N_k[k];
+		param$mu[k,] <- param$mu[k,] + d * x;
+		param$sig[[k]] <- (1 - d) * (param$sig[[k]] + d * x %*% t(x));
+	}
+
+	param;
+}
+
+
+
+
+N <- nrow(xx);
+K <- 2
 
 for (n in 1:100) {
 	timing <- system.time({
 		# 初期値
-		param <- init_param(2, ncol(xx));
+		param <- init_param(K, ncol(xx));
 
+if(F){	# incremental EM. det(Σ) が負になる……
+		param$gamma <- matrix(numeric(N * K), N) + 1/K;  # for incremental EM
+
+		randomlist <- sample(1:N);
+		for(m in randomlist) {
+			param <- OnlineEM(xx, m, param);
+		}
+}
 		# 収束するまで繰り返し
 		likeli <- -999999;
 		for (j in 1:100) {
