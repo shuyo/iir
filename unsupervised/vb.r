@@ -90,18 +90,42 @@ VB_Mstep <- function(xx, init_param, resp) {
 	param;
 }
 
-
+#sink(format(Sys.time(), "%m%d%H%M.txt"));
 K <- 6;
-init_param <- list(alpha=0.001, beta=25, nyu=ncol(xx));
-param <- first_param(xx, init_param, K);
-init_param$W <- param$W[[1]];
-init_param$m <- param$m;
+nokori <- numeric(6);
+for(i in 1:10000) {
+	init_param <- list(
+		i=i,
+		alpha= 10^runif(1, min=-4, max=2),
+		beta=runif(1, min=1, max=6)^2, 
+		nyu=ncol(xx)+runif(1, min=-1, max=1)
+	);
+	param <- first_param(xx, init_param, K);
+	init_param$m <- param$m;
+	# print(init_param);
+	init_param$W <- param$W[[1]];
 
 
+	# ˆÈ~AŽû‘©‚·‚é‚Ü‚ÅŒJ‚è•Ô‚µ
+	for(j in 1:50) {
+		resp <- VB_Estep(xx, param);
+		#plot(xx, col=rgb(resp[,1],0,resp[,2]), xlab=paste(sprintf(" %1.3f",t(param$m)),collapse=","), ylab="");
+		#points(param$m, pch = 8);
+		param <- VB_Mstep(xx, init_param, resp);
+	}
 
-# ˆÈ~AŽû‘©‚·‚é‚Ü‚ÅŒJ‚è•Ô‚µ
-resp <- VB_Estep(xx, param);
-#plot(xx, col=rgb(resp[,1],0,resp[,2]), xlab=paste(sprintf(" %1.3f",t(param$m)),collapse=","), ylab="");
-#points(param$m, pch = 8);
-param <- VB_Mstep(xx, init_param, resp);
+	# print("N_k");
+	# print(colSums(resp), width=200);
+	# print(param, width=200);
+	
+	N_k <- colSums(resp);
+	n <- 0;
+	for(k in 1:K) {
+		if (N_k[k] >= 1) n <- n + 1;
+	}
+	nokori[n] <- nokori[n] + 1;
+	if (i %% 10 == 0) print(nokori);
+}
+print(nokori);
+#sink();
 
