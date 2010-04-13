@@ -2,6 +2,14 @@
 data("faithful");
 xx <- scale(faithful, apply(faithful, 2, mean), apply(faithful, 2, sd));
 
+# common
+nan2zero <- function(x) ifelse(is.nan(x), 0, x);
+drawGraph <- function(resp, m) {
+	plot(xx, xlab=paste(sprintf(" %1.3f",N_k),collapse=","), ylab="",
+		col=rgb(rowSums(resp[,1:3])*0.9, rowSums(resp[,3:5])*0.8, rowSums(resp[,c(2,4,6)])*0.9));
+	points(m, pch = 8);
+}
+
 # 1. ƒpƒ‰ƒ[ƒ^‚ð‰Šú‰»‚·‚éB
 first_param <- function(xx, init_param, K) {
 	D <- ncol(xx);
@@ -9,14 +17,13 @@ first_param <- function(xx, init_param, K) {
 	param <- list(
 	    alpha = numeric(K) + init_param$alpha + N / K,
 	    beta  = numeric(K) + init_param$beta + N / K,
-	    nyu   = numeric(K) + init_param$nyu + N / K,
+	    nu    = numeric(K) + init_param$nu + N / K,
 	    W     = list(),
 	    m     = matrix(rnorm(K * D), nrow=K)
 	);
-	for(k in 1:K) param$W[[k]] <- diag(D);
+	for(k in 1:K) param$W[[k]] <- init_param$W;
 	param;
 }
-
 
 # 2. (10.65)`(10.67) ‚É‚æ‚è•‰’S—¦ r_nk ‚ð“¾‚é
 VB_Estep <- function(xx, param) {
@@ -25,11 +32,16 @@ VB_Estep <- function(xx, param) {
 
 	# (10.65)
 	ln_lambda <- sapply(1:K, function(k) {
-		sum(digamma((param$nyu[k] + 1 - 1:D) / 2)) + D * log(2) + log(det(param$W[[k]]));
+		tryCatch({
+			sum(digamma((param$nu[k] + 1 - 1:D) / 2)) + D * log(2) + log(det(param$W[[k]]));
+		}, error=function(e){
+			print(param$W);
+			0;
+		})
 	});
 
 	# (10.66)
-	ln_pi <- exp(digamma(param$alpha) - digamma(sum(param$alpha)));
+	ln_pi <- digamma(param$alpha) - digamma(sum(param$alpha));
 
 	# (10.67)
 	t(apply(xx, 1, function(x){
@@ -37,9 +49,8 @@ VB_Estep <- function(xx, param) {
 			xm <- x - param$m[k,];
 			t(xm) %*% param$W[[k]] %*% xm;
 		});
-		ln_rho <- ln_pi + ln_lambda / 2 - D / 2 / param$beta - param$nyu / 2 * quad;
-		ln_rho <- ln_rho - max(ln_rho);   # exp ‚ð Inf ‚É‚³‚¹‚È‚¢‚æ‚¤
-		rho <- exp(ln_rho);
+		ln_rho <- ln_pi + ln_lambda / 2 - D / 2 / param$beta - param$nu / 2 * quad;
+		rho <- exp(ln_rho - max(ln_rho));   # exp ‚ð Inf ‚É‚³‚¹‚È‚¢‚æ‚¤ max ‚ðˆø‚­
 		rho / sum(rho);
 	}));
 }
@@ -52,11 +63,11 @@ VB_Mstep <- function(xx, init_param, resp) {
 	D <- ncol(xx);
 	N <- nrow(xx);
 
-	# (10.51)
+	# (10.51) N_k ‚Í 0 ‚É‚È‚é‰Â”\«‚ ‚è
 	N_k <- colSums(resp);
 
 	# (10.52)
-	x_k <- (t(resp) %*% xx) / N_k;
+	x_k <- nan2zero((t(resp) %*% xx) / N_k);
 
 	# (10.53)
 	S_k <- list();
@@ -66,13 +77,13 @@ VB_Mstep <- function(xx, init_param, resp) {
 			x <- xx[n,] - x_k[k,];
 			S <- S + resp[n,k] * ( x %*% t(x) );
 		}
-		S_k[[k]] <- S / N_k[k];
+		S_k[[k]] <- nan2zero(S / N_k[k]);
 	}
 
 	param <- list(
 	  alpha = init_param$alpha + N_k,    # (10.58)
 	  beta  = init_param$beta + N_k,     # (10.60)
-	  nyu   = init_param$nyu + N_k,      # (10.63)
+	  nu    = init_param$nu + N_k,      # (10.63)
 	  W     = list()
 	);
 
@@ -83,49 +94,62 @@ VB_Mstep <- function(xx, init_param, resp) {
 	W0_inv <- solve(init_param$W);
 	for(k in 1:K) {
 		x <- x_k[k,] - init_param$m[k,];
-		Wk_inv <- W0_inv + N_k[k] * S_k[[k]] + init_param$beta * N_k[k] * ( x %*% t(x)) / param$beta[k];
-		param$W[[k]] <- solve(Wk_inv);
+		tryCatch({
+			Wk_inv <- W0_inv + N_k[k] * S_k[[k]] + init_param$beta * N_k[k] * ( x %*% t(x)) / param$beta[k];
+			param$W[[k]] <- solve(Wk_inv);
+		}, error=function(e){
+			print("Wk_inv error");
+			print(N_k);
+			print(S_k[[k]]);
+			print(param$beta[k]);
+			param$W[[k]] <<- diag(D);
+		})
 	}
 
 	param;
 }
 
-#sink(format(Sys.time(), "%m%d%H%M.txt"));
+ALPHA <- 0.001;
+argv <- commandArgs(T);
+if (length(argv)>0) ALPHA <- as.numeric(commandArgs(T))[1];
+
+sink(format(Sys.time(), "%m%d%H%M.txt"));
 K <- 6;
 nokori <- numeric(6);
-for(i in 1:10000) {
+for(i in 1:1000) {
 	init_param <- list(
-		i=i,
-		alpha= 10^runif(1, min=-4, max=2),
-		beta=runif(1, min=1, max=6)^2, 
-		nyu=ncol(xx)+runif(1, min=-1, max=1)
+		alpha = ALPHA,  # 10^runif(1, min=-4, max=2),
+		beta  = runif(1, min=1, max=6)^2, 
+		nu    = ncol(xx)+runif(1, min=-1, max=1),
+		m     = matrix(numeric(K * ncol(xx)), nrow=K),
+		W     = diag(ncol(xx))
 	);
 	param <- first_param(xx, init_param, K);
-	init_param$m <- param$m;
-	# print(init_param);
-	init_param$W <- param$W[[1]];
 
+	cat(sprintf("%d: alpha=%.5f, beta=%.3f, nu=%.3f\n", i, init_param$alpha, init_param$beta, init_param$nu));
+	print(param$m);
 
 	# ˆÈ~AŽû‘©‚·‚é‚Ü‚ÅŒJ‚è•Ô‚µ
-	for(j in 1:50) {
+	for(j in 1:100) {
 		resp <- VB_Estep(xx, param);
-		#plot(xx, col=rgb(resp[,1],0,resp[,2]), xlab=paste(sprintf(" %1.3f",t(param$m)),collapse=","), ylab="");
-		#points(param$m, pch = 8);
-		param <- VB_Mstep(xx, init_param, resp);
+		new_param <- VB_Mstep(xx, init_param, resp);
+		if (is.null(new_param)) break;
+		param <- new_param;
 	}
 
-	# print("N_k");
-	# print(colSums(resp), width=200);
-	# print(param, width=200);
-	
 	N_k <- colSums(resp);
+
+	print(paste("N_k:", sprintf(" %1.3f",N_k),collapse=","));
+	#print(param, width=200);
+	#drawGraph(resp, param$m);
+
 	n <- 0;
 	for(k in 1:K) {
-		if (N_k[k] >= 1) n <- n + 1;
+		if (N_k[k] >= 0.1) n <- n + 1;
 	}
 	nokori[n] <- nokori[n] + 1;
-	if (i %% 10 == 0) print(nokori);
 }
+print("remained components:");
 print(nokori);
-#sink();
+sink();
 
