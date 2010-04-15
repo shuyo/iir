@@ -1,8 +1,25 @@
 # EM algorithm and Online EMA
 
-# Old Faithful dataset を取得して正規化
-data("faithful");
-xx <- scale(faithful, apply(faithful, 2, mean), apply(faithful, 2, sd));
+
+argv <- commandArgs(T);
+if (length(argv[argv=="faithful"])) {
+	# Old Faithful dataset を取得して正規化
+	data("faithful");
+	xx <- scale(faithful, apply(faithful, 2, mean), apply(faithful, 2, sd));
+	K <- 2;
+} else {
+	# ３次元＆３峰のテストデータを生成
+	library(MASS);
+	xx <- rbind(
+		mvrnorm(100, c(1,3,0), matrix(c(0.7324,-0.9193,0.5092,-0.9193,2.865,-0.2976,0.5092,-0.2976,3.294),3)),
+		mvrnorm(150, c(4,-1,-2), matrix(c(2.8879,-0.2560,0.5875,-0.2560,3.0338,1.2960,0.5875,1.2960,1.7438),3)),
+		mvrnorm(200, c(0,2,1), matrix(c(3.1178,1.7447,0.6726,1.7447,2.3693,0.0521,0.6726,0.0521,0.7917),3))
+	);
+	xx <- xx[sample(nrow(xx)),]
+	K <- 3;
+}
+N <- nrow(xx);
+
 
 # パラメータの初期化(平均、共分散、混合率)
 init_param <- function(K, D) {
@@ -62,19 +79,14 @@ Likelihood <- function(xx, param) {
 OnlineEM <- function(xx, m, param) {
 	N <- nrow(xx);
 	K <- nrow(param$mu);
-	#cat(sprintf("---- %d: (%1.4f, %1.4f)\n", m, xx[m, 1], xx[m, 2]));
+
 	new_gamma <- param$mix * sapply(1:K, function(k) {
-		#print(param$mix[k]);
-		#print(param$mu[k,]);
-		#print(param$sig[[k]]);
 		dmnorm(xx[m, ], param$mu[k,], param$sig[[k]]);
 	});
 	new_gamma <- new_gamma / sum(new_gamma);
 	delta <- new_gamma - param$gamma[m,];
 	param$gamma[m,] <- new_gamma;
 
-	#cat(sprintf("new_gamma: %1.3f %1.3f\n", new_gamma[1], new_gamma[2]));
-	#cat(sprintf("delta: %1.3f %1.3f\n", delta[1], delta[2]));
 	param$mix <- param$mix + delta / N;
 	N_k <- param$mix * N;
 	for(k in 1:K) {
@@ -83,15 +95,9 @@ OnlineEM <- function(xx, m, param) {
 		param$mu[k,] <- param$mu[k,] + d * x;
 		param$sig[[k]] <- (1 - d) * (param$sig[[k]] + d * x %*% t(x));
 	}
-
 	param;
 }
 
-
-
-
-N <- nrow(xx);
-K <- 2;
 
 for (n in 1:10) {
 	# 初期値
@@ -112,7 +118,8 @@ for (n in 1:10) {
 			likeli <- l;
 		}
 	});
-	cat(sprintf("A%d:convergence=%d, likelihood=%.4f, %1.2fsec\n", n, j, likeli, timing[3]));
+	cat(sprintf("Normal %d:convergence=%d, likelihood=%.4f, %1.2fsec\n", n, j, likeli, timing[3]));
+	#print(param$mu);
 
 	# incremental EM
 	timing <- system.time({
@@ -134,7 +141,8 @@ for (n in 1:10) {
 			likeli <- l;
 		}
 	});
-	cat(sprintf("B%d:convergence=%d, likelihood=%.4f, %1.2fsec\n", n, j, likeli, timing[3]));
+	cat(sprintf("Online %d:convergence=%d, likelihood=%.4f, %1.2fsec\n", n, j, likeli, timing[3]));
+	#print(param$mu);
 }
 
 # plot(xx, col=rgb(gamma_nk[,1],0,gamma_nk[,2]), xlab=paste(sprintf("%1.3f",t(param$mu)),collapse=","), ylab="");
