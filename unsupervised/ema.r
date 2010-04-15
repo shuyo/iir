@@ -69,7 +69,6 @@ OnlineEM <- function(xx, m, param) {
 		#print(param$sig[[k]]);
 		dmnorm(xx[m, ], param$mu[k,], param$sig[[k]]);
 	});
-	#print(new_gamma);
 	new_gamma <- new_gamma / sum(new_gamma);
 	delta <- new_gamma - param$gamma[m,];
 	param$gamma[m,] <- new_gamma;
@@ -92,36 +91,50 @@ OnlineEM <- function(xx, m, param) {
 
 
 N <- nrow(xx);
-K <- 2
+K <- 2;
 
 for (n in 1:10) {
+	# 初期値
+	param0 <- init_param(K, ncol(xx));
+
+	# normal EM
 	timing <- system.time({
-		# 初期値
-		param <- init_param(K, ncol(xx));
+		param <- param0;
 
-if(T){	# incremental EM. det(Σ) が負になる……
-		param$gamma <- matrix(numeric(N * K), N) + 1/K;  # for incremental EM
-
-		randomlist <- sample(1:N);
-		for(m in randomlist) {
-			param <- OnlineEM(xx, m, param);
-			#cat(sprintf("det(sig1) = %1.4f, det(sig2) = %1.4f\n", det(param$sig[[1]]), det(param$sig[[2]])));
-			print(param$mu);
-		}
-} else {
 		# 収束するまで繰り返し
 		likeli <- -999999;
 		for (j in 1:100) {
 			gamma_nk <- Estep(xx, param);
 			param <- Mstep(xx, gamma_nk);
-			l <- Likelihood(xx, param);
-			if (l - likeli < 0.0001) break;
+
+			cat(sprintf(" %d: %.3f\n", j, (l <- Likelihood(xx, param))));
+			if (l - likeli < 0.001) break;
 			likeli <- l;
-			print(param$sig[[1]]);
 		}
-}
 	});
-	cat(sprintf("%d:convergence=%d, likelihood=%f, %1.2fsec\n", n, j, likeli, timing[3]));
+	cat(sprintf("A%d:convergence=%d, likelihood=%.4f, %1.2fsec\n", n, j, likeli, timing[3]));
+
+	# incremental EM
+	timing <- system.time({
+		param <- param0;
+
+		# 最初の一周は通常の EM
+		gamma_nk <- Estep(xx, param);
+		param <- Mstep(xx, gamma_nk);
+		param$gamma <- gamma_nk;
+
+		# online EM
+		likeli <- -999999;
+		for (j in 2:100) {
+			randomlist <- sample(1:N);
+			for(m in randomlist) param <- OnlineEM(xx, m, param);
+
+			cat(sprintf(" %d: %.3f\n", j, (l <- Likelihood(xx, param))));
+			if (l - likeli < 0.001) break;
+			likeli <- l;
+		}
+	});
+	cat(sprintf("B%d:convergence=%d, likelihood=%.4f, %1.2fsec\n", n, j, likeli, timing[3]));
 }
 
 # plot(xx, col=rgb(gamma_nk[,1],0,gamma_nk[,2]), xlab=paste(sprintf("%1.3f",t(param$mu)),collapse=","), ylab="");
