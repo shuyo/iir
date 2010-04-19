@@ -32,12 +32,7 @@ VB_Estep <- function(xx, param) {
 
 	# (10.65)
 	ln_lambda <- sapply(1:K, function(k) {
-		tryCatch({
-			sum(digamma((param$nu[k] + 1 - 1:D) / 2)) + D * log(2) + log(det(param$W[[k]]));
-		}, error=function(e){
-			print(param$W);
-			0;
-		})
+		sum(digamma((param$nu[k] + 1 - 1:D) / 2)) + D * log(2) + log(det(param$W[[k]]));
 	});
 
 	# (10.66)
@@ -109,14 +104,37 @@ VB_Mstep <- function(xx, init_param, resp) {
 	param;
 }
 
+
+
+# •Ï•ª‰ºŠE
+VB_LowerBound <- function(init_param, param, resp, N) {
+	D <- ncol(param$m);
+	K <- nrow(param$m);
+
+	a <- lgamma(K * init_param$alpha) - K * lgamma(init_param$alpha) - lgamma(sum(param$alpha)) + sum(lgamma(param$alpha));
+	b <- D / 2 * (K * log(init_param$beta) - sum(log(param$beta)));
+	r <- sum(nan2zero(resp * log(resp)));
+	L <- a + b - r - D * N / 2 * log(2 * pi);
+
+	B <- function(W, nu) {
+		D <- ncol(W);
+		nu / 2 * (log(det(W)) + D * log(2)) + sum(lgamma((nu + 1 - 1:D) / 2));
+	}
+	L <- L - K * B(init_param$W, init_param$nu);
+	for(k in 1:K) L <- L + B(param$W[[k]], param$nu[k]);
+	L;
+}
+
+
 ALPHA <- 0.001;
 argv <- commandArgs(T);
 if (length(argv)>0) ALPHA <- as.numeric(commandArgs(T))[1];
 
-sink(format(Sys.time(), "%m%d%H%M.txt"));
+#sink(format(Sys.time(), "vb%m%d%H%M.txt"));
 K <- 6;
 nokori <- numeric(6);
-for(i in 1:1000) {
+max_L <- -1e99;
+for(i in 1:100) {
 	init_param <- list(
 		alpha = ALPHA,  # 10^runif(1, min=-4, max=2),
 		beta  = runif(1, min=1, max=6)^2, 
@@ -126,30 +144,35 @@ for(i in 1:1000) {
 	);
 	param <- first_param(xx, init_param, K);
 
-	cat(sprintf("%d: alpha=%.5f, beta=%.3f, nu=%.3f\n", i, init_param$alpha, init_param$beta, init_param$nu));
-	print(param$m);
-
 	# ˆÈ~AŽû‘©‚·‚é‚Ü‚ÅŒJ‚è•Ô‚µ
+	pre_L <- -1e99;
 	for(j in 1:100) {
 		resp <- VB_Estep(xx, param);
 		new_param <- VB_Mstep(xx, init_param, resp);
 		if (is.null(new_param)) break;
 		param <- new_param;
+		L <- VB_LowerBound(init_param, param, resp, nrow(xx));
+		#print(L);
+		if (L - pre_L < 0) cat(sprintf("DECREASED LOWER BOUND! %f => %f\n", pre_L, L));
+		if (L - pre_L < 0.0001) break;
+		pre_L <- L;
 	}
 
 	N_k <- colSums(resp);
 
-	print(paste("N_k:", sprintf(" %1.3f",N_k),collapse=","));
-	#print(param, width=200);
+	cat(sprintf("#%d: alpha=%.5f, beta=%.3f, nu=%.3f, convergence=%d, L=%.3f, N_k = %s\n",
+		i, init_param$alpha, init_param$beta, init_param$nu, j, L, paste(sprintf(" %1.3f",N_k), collapse=",")));
 	#drawGraph(resp, param$m);
 
 	n <- 0;
 	for(k in 1:K) {
-		if (N_k[k] >= 0.1) n <- n + 1;
+		if (N_k[k] >= 0.5) n <- n + 1;
 	}
 	nokori[n] <- nokori[n] + 1;
+	if (max_L < L) max_L <- L;
 }
-print("remained components:");
-print(nokori);
-sink();
+cat(sprintf("maximum lower bound = %.3f\n", max_L));
+cat(sprintf("remained components: %s\n", paste(sprintf("%d:%d", 1:K, nokori), collapse=", ")));
+
+#sink();
 
