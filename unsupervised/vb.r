@@ -1,3 +1,5 @@
+# Variational Bayes (c)2010 Nakatani Shuyo
+
 # Old Faithful dataset を取得して正規化
 data("faithful");
 xx <- scale(faithful, apply(faithful, 2, mean), apply(faithful, 2, sd));
@@ -8,6 +10,12 @@ drawGraph <- function(resp, m) {
 	plot(xx, xlab=paste(sprintf(" %1.3f",N_k),collapse=","), ylab="",
 		col=rgb(rowSums(resp[,1:3])*0.9, rowSums(resp[,3:5])*0.8, rowSums(resp[,c(2,4,6)])*0.9));
 	points(m, pch = 8);
+}
+
+# calcurate normalization factor of Wishart distribution (except pi^D(D-1)/4)
+calc_lnB <- function(W, nu) {
+	D <- ncol(W);
+	- nu / 2 * (log(det(W)) + D * log(2)) - sum(lgamma((nu + 1 - 1:D) / 2));
 }
 
 # 1. パラメータを初期化する。
@@ -49,7 +57,6 @@ VB_Estep <- function(xx, param) {
 		rho / sum(rho);
 	}));
 }
-
 
 # 3. r_nk を用いて、(10.51)～(10.53) により統計量 N_k, x_k, S_k を求め、
 # それらを用いて、(10.58), (10.60)～(10.63) によりパラメータ α_k, m_k, β_k, ν_k, W_k を更新する。
@@ -104,9 +111,7 @@ VB_Mstep <- function(xx, init_param, resp) {
 	param;
 }
 
-
-
-# 変分下界
+# Variational Lower Bound
 VB_LowerBound <- function(init_param, param, resp, N) {
 	D <- ncol(param$m);
 	K <- nrow(param$m);
@@ -116,29 +121,17 @@ VB_LowerBound <- function(init_param, param, resp, N) {
 	r <- sum(nan2zero(resp * log(resp)));
 	L <- a + b - r - D * N / 2 * log(2 * pi);
 
-	B <- function(W, nu) {
-		D <- ncol(W);
-		nu / 2 * (log(det(W)) + D * log(2)) + sum(lgamma((nu + 1 - 1:D) / 2));
-	}
-	L <- L - K * B(init_param$W, init_param$nu);
-	for(k in 1:K) L <- L + B(param$W[[k]], param$nu[k]);
+	L <- L + K * calc_lnB(init_param$W, init_param$nu);
+	for(k in 1:K) L <- L - calc_lnB(param$W[[k]], param$nu[k]);
 	L;
 }
 
-
-ALPHA <- 0.001;
-argv <- commandArgs(T);
-if (length(argv)>0) ALPHA <- as.numeric(commandArgs(T))[1];
-
-#sink(format(Sys.time(), "vb%m%d%H%M.txt"));
-K <- 6;
-nokori <- numeric(6);
-max_L <- -1e99;
-for(i in 1:100) {
+# Variational Bayesian Inference
+VB_inference <- function(xx, K, alpha_0, beta_0, nu_0) {
 	init_param <- list(
-		alpha = ALPHA,  # 10^runif(1, min=-4, max=2),
-		beta  = runif(1, min=1, max=6)^2, 
-		nu    = ncol(xx)+runif(1, min=-1, max=1),
+		alpha = alpha_0,  
+		beta  = beta_0, 
+		nu    = nu_0, 
 		m     = matrix(numeric(K * ncol(xx)), nrow=K),
 		W     = diag(ncol(xx))
 	);
@@ -146,7 +139,7 @@ for(i in 1:100) {
 
 	# 以降、収束するまで繰り返し
 	pre_L <- -1e99;
-	for(j in 1:100) {
+	for(j in 1:999) {
 		resp <- VB_Estep(xx, param);
 		new_param <- VB_Mstep(xx, init_param, resp);
 		if (is.null(new_param)) break;
@@ -158,21 +151,45 @@ for(i in 1:100) {
 		pre_L <- L;
 	}
 
-	N_k <- colSums(resp);
-
-	cat(sprintf("#%d: alpha=%.5f, beta=%.3f, nu=%.3f, convergence=%d, L=%.3f, N_k = %s\n",
-		i, init_param$alpha, init_param$beta, init_param$nu, j, L, paste(sprintf(" %1.3f",N_k), collapse=",")));
-	#drawGraph(resp, param$m);
-
-	n <- 0;
-	for(k in 1:K) {
-		if (N_k[k] >= 0.5) n <- n + 1;
-	}
-	nokori[n] <- nokori[n] + 1;
-	if (max_L < L) max_L <- L;
+	param$resp <- resp;
+	param$init <- init_param;
+	param$convergence <- j;
+	param$L <- L;
+	param;
 }
-cat(sprintf("maximum lower bound = %.3f\n", max_L));
-cat(sprintf("remained components: %s\n", paste(sprintf("%d:%d", 1:K, nokori), collapse=", ")));
 
-#sink();
+
+# command line
+alpha_0 <- 1;
+argv <- commandArgs(T);
+if (length(argv)>0) alpha_0 <- as.numeric(commandArgs(T))[1];
+
+# main
+sink(format(Sys.time(), "vb%m%d%H%M.txt"));
+
+I <- 10;
+count <- 1;
+for(K in 2:6) for(beta_0 in 1:20/20) for(nu_0 in ncol(xx)-1+1:20/2) {
+	#cat(sprintf("#%d: K=%d, alpha=%f, beta=%f, nu=%f\n", count, K, alpha_0, beta_0, nu_0));
+
+	max_L <- -1e99;
+	for(i in 1:I) {
+		param <- VB_inference(xx, K, alpha_0, beta_0, nu_0);
+
+		N_k <- colSums(param$resp);
+		n <- sum(N_k >= 0.5);
+		#nonzeros[n] <- nonzeros[n] + 1;
+		if (max_L < param$L) max_L <- param$L;
+
+		cat(sprintf("#%d-%d: convergence=%d, L=%.3f, N_k = %d(%s)\n",
+			count, i, param$convergence, param$L, n, paste(sprintf("%.3f",N_k), collapse=", ")));
+		#drawGraph(param$resp, param$m);
+	}
+	cat(sprintf("#%d: K=%d, alpha=%f, beta=%f, nu=%f, max_L=%.3f, p(D|K)=%.3f\n", count, K, alpha_0, beta_0, nu_0, max_L, max_L+lfactorial(K)));
+
+	count <- count + 1;
+}
+#cat(sprintf("non-zero components: %s\n", paste(sprintf("%d:%d", 1:K, nonzeros), collapse=", ")));
+
+sink();
 
