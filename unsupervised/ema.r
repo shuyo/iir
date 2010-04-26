@@ -3,12 +3,12 @@
 
 argv <- commandArgs(T);
 if (length(argv[argv=="faithful"])) {
-	# Old Faithful dataset ‚ðŽæ“¾‚µ‚Ä³‹K‰»
+	# Old Faithful dataset ã‚’å–å¾—ã—ã¦æ­£è¦åŒ–
 	data("faithful");
 	xx <- scale(faithful, apply(faithful, 2, mean), apply(faithful, 2, sd));
 	K <- 2;
 } else {
-	# ‚RŽŸŒ³•‚R•ô‚ÌƒeƒXƒgƒf[ƒ^‚ð¶¬
+	# ï¼“æ¬¡å…ƒï¼†ï¼“å³°ã®ãƒ†ã‚¹ãƒˆãƒ‡ãƒ¼ã‚¿ã‚’ç”Ÿæˆ
 	library(MASS);
 	xx <- rbind(
 		mvrnorm(100, c(1,3,0), matrix(c(0.7324,-0.9193,0.5092,-0.9193,2.865,-0.2976,0.5092,-0.2976,3.294),3)),
@@ -21,20 +21,20 @@ if (length(argv[argv=="faithful"])) {
 N <- nrow(xx);
 
 
-# ƒpƒ‰ƒ[ƒ^‚Ì‰Šú‰»(•½‹ÏA‹¤•ªŽUA¬‡—¦)
+# ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ã®åˆæœŸåŒ–(å¹³å‡ã€å…±åˆ†æ•£ã€æ··åˆçŽ‡)
 init_param <- function(K, D) {
 	sig <- list();
 	for(k in 1:K) sig[[k]] <- diag(K);
 	list(mu = matrix(rnorm(K * D), D), mix = numeric(K)+1/K, sig = sig);
 }
 
-# ‘½ŽŸŒ³³‹K•ª•z–§“xŠÖ”
+# å¤šæ¬¡å…ƒæ­£è¦åˆ†å¸ƒå¯†åº¦é–¢æ•°
 dmnorm <- function(x, mu, sig) {
 	D <- length(mu);
 	1/((2 * pi)^D * sqrt(det(sig))) * exp(- t(x-mu) %*% solve(sig) %*% (x-mu) / 2)[1];
 }
 
-# EM ƒAƒ‹ƒSƒŠƒYƒ€‚Ì E ƒXƒeƒbƒv
+# EM ã‚¢ãƒ«ã‚´ãƒªã‚ºãƒ ã® E ã‚¹ãƒ†ãƒƒãƒ—
 Estep <- function(xx, param) {
 	K <- nrow(param$mu);
 	t(apply(xx, 1, function(x){
@@ -45,7 +45,7 @@ Estep <- function(xx, param) {
 	}))
 }
 
-# EM ƒAƒ‹ƒSƒŠƒYƒ€‚Ì M ƒXƒeƒbƒv
+# EM ã‚¢ãƒ«ã‚´ãƒªã‚ºãƒ ã® M ã‚¹ãƒ†ãƒƒãƒ—
 Mstep <- function(xx, gamma_nk) {
 	K <- ncol(gamma_nk);
 	D <- ncol(xx);
@@ -68,7 +68,7 @@ Mstep <- function(xx, gamma_nk) {
 	list(mu=new_mu, sig=new_sig, mix=new_mix);
 }
 
-# ‘Î”–Þ“xŠÖ”
+# å¯¾æ•°å°¤åº¦é–¢æ•°
 Likelihood <- function(xx, param) {
 	K <- nrow(param$mu);
 	sum(apply(xx, 1, function(x){
@@ -100,16 +100,16 @@ OnlineEM <- function(xx, m, param) {
 
 
 for (n in 1:10) {
-	# ‰Šú’l
+	# åˆæœŸå€¤
 	param0 <- init_param(K, ncol(xx));
 
 	# normal EM
 	timing <- system.time({
 		param <- param0;
 
-		# Žû‘©‚·‚é‚Ü‚ÅŒJ‚è•Ô‚µ
+		# åŽæŸã™ã‚‹ã¾ã§ç¹°ã‚Šè¿”ã—
 		likeli <- -999999;
-		for (j in 1:100) {
+		for (j in 1:999) {
 			gamma_nk <- Estep(xx, param);
 			param <- Mstep(xx, gamma_nk);
 
@@ -125,7 +125,7 @@ for (n in 1:10) {
 	timing <- system.time({
 		param <- param0;
 
-		# Å‰‚ÌˆêŽü‚Í’Êí‚Ì EM
+		# æœ€åˆã®ä¸€å‘¨ã¯é€šå¸¸ã® EM
 		gamma_nk <- Estep(xx, param);
 		param <- Mstep(xx, gamma_nk);
 		param$gamma <- gamma_nk;
