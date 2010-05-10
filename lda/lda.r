@@ -1,7 +1,11 @@
 
 K <- 20;
 I <- 100;
-text <- tolower(readLines("../data/gift_of_magi.txt"));
+
+filename <- "../data/gift_of_magi.txt";
+argv <- commandArgs(T);
+if (length(argv)>0) filename <- commandArgs(T)[1];
+text <- tolower(readLines(filename));
 corpus <- strsplit(text, split="[[:blank:][:punct:]]", perl=T);
 
 words <- c();
@@ -91,9 +95,9 @@ for(m in 1:M) {
 	theta_m <- n_m_z[m,] + alpha;
 	theta[m,] <- theta_m / sum(theta_m);
 }
-for(t in 1:V) {
-	phi_t <- n_z_t[,t] + beta;
-	phi[,t] <- phi_t / sum(phi_t);
+for(z in 1:K) {
+	phi_z <- n_z_t[z,] + beta;
+	phi[z,] <- phi_z / sum(phi_z);
 }
 colnames(phi) <- words;
 
