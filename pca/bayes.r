@@ -1,18 +1,19 @@
-# Probability Principal Component Analysis with EM Algorithm for R
+# Bayesian PPCA for R
 
 M <- 2;
-I <- 50;
+I <- 200;
 directory <- ".";
 
 argv <- commandArgs(T);
 if (length(argv)>0) directory <- commandArgs(T)[1];
 if (length(argv)>1) M <- as.integer(commandArgs(T)[2]);
+if (length(argv)>2) I <- as.integer(commandArgs(T)[3]);
 
 oilflow <- as.matrix(read.table(sprintf("%s/DataTrn.txt", directory)));
 oilflow.labels <- read.table(sprintf("%s/DataTrnLbls.txt", directory));
 likelihood.pre <- -999999;
 
-ppca_em <- function(oilflow, oilflow.labels, M, I) {
+ppca_bayes <- function(oilflow, oilflow.labels, M, I) {
 	D <- ncol(oilflow);
 	N <- nrow(oilflow);
 	col <- colSums(t(oilflow.labels) * c(4,3,2));
@@ -21,6 +22,7 @@ ppca_em <- function(oilflow, oilflow.labels, M, I) {
 	# initialize parameters
 	W <- matrix(rnorm(M*D), D);
 	sigma2 <- rnorm(1);
+	alpha <- rep(1, M);
 
 	# mu = mean x_bar
 	mu <- colMeans(oilflow);
@@ -46,19 +48,10 @@ ppca_em <- function(oilflow, oilflow.labels, M, I) {
 			sum_Ezz <- sum_Ezz + ezz;
 		}
 
-		# likelihood
-		C <- W %*% t(W) + diag(D) * sigma2;                 # (PRML 12.36)
-		C_inv <- (diag(D) - W %*% M_inv %*% t(W)) / sigma2; # (PRML 12.40)
-		likelihood <- - N / 2 * ( D * log(2 * pi) + log(det(C)) + sum(diag(C_inv %*% S)) ); # (PRML 12.44)
-		plot(Ez, col=col, pch=pch, xlim=c(-3,3),ylim=c(-3,3),ylab="",
-			xlab=sprintf("I=%d, log likelihood=%.3f", i, likelihood))
-		if ((likelihood - likelihood.pre) < 0.001) break;
-		likelihood.pre <- likelihood;
-
 		### M-step:
 
-		# W_new = {sum (x_n - x^bar)E[z_n]^T}{sum E[z_n z_n^T]}^-1 (PRML 12.56)
-		W <- xn_minus_x_bar %*% Ez %*% solve(sum_Ezz);
+		# W_new = {sum (x_n - x^bar)E[z_n]^T}{sum E[z_n z_n^T] + sigma^2 A}^-1 (PRML 12.63)
+		W <- xn_minus_x_bar %*% Ez %*% solve(sum_Ezz + diag(sigma2 * alpha));
 
 		# sigma_new^2 = 1/ND sum{ |x_n-x^bar|^2 - 2E[z_n]^T W^T (x_n-x^bar) + Tr(E[z_n z_n^T] W^T W) } (PRML 12.57)
 		sigma2 <- sum(xn_minus_x_bar^2) - 2 * sum(diag(Ez %*% t(W) %*% xn_minus_x_bar));
@@ -67,11 +60,16 @@ ppca_em <- function(oilflow, oilflow.labels, M, I) {
 		}
 		sigma2 <- sigma2 / N / D;
 
+		# alpha_i = D / w_i^T w_i (PRML 12.62)
+		alpha <- D / diag(t(W) %*% W);
+
+		cat(sprintf("I=%d, alpha=(%s)\n", i, paste(sprintf(" %.2f",alpha),collapse=",")));
 	}
-	print(likelihood);
+
+	png();
+	plot(Ez[,order(alpha, decreasing=T)[1:2]], col=col, pch=pch, xlim=c(-3,3),ylim=c(-3,3),ylab="",
+			xlab=sprintf("M=%d, I=%d, alpha=(%s)\n", M, i, paste(sprintf(" %.2f",alpha),collapse=",")));
 };
 
-library(animation);
-saveMovie(ppca_em(oilflow, oilflow.labels, M, I), interval=1, moviename="ppca_em",
-	movietype="gif", outdir=getwd(),width=480, height=480);
+ppca_bayes(oilflow, oilflow.labels, M, I);
 
