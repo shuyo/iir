@@ -1,19 +1,21 @@
 # Bayesian PPCA for R
 
 M <- 2;
-I <- 200;
+I <- 50;
+splits <- 1;
+
 directory <- ".";
 
 argv <- commandArgs(T);
 if (length(argv)>0) directory <- commandArgs(T)[1];
 if (length(argv)>1) M <- as.integer(commandArgs(T)[2]);
 if (length(argv)>2) I <- as.integer(commandArgs(T)[3]);
+if (length(argv)>3) splits <- as.integer(commandArgs(T)[4]);
 
 oilflow <- as.matrix(read.table(sprintf("%s/DataTrn.txt", directory)));
 oilflow.labels <- read.table(sprintf("%s/DataTrnLbls.txt", directory));
-likelihood.pre <- -999999;
 
-ppca_bayes <- function(oilflow, oilflow.labels, M, I) {
+ppca_bayes <- function() {
 	D <- ncol(oilflow);
 	N <- nrow(oilflow);
 	col <- colSums(t(oilflow.labels) * c(4,3,2));
@@ -54,7 +56,7 @@ ppca_bayes <- function(oilflow, oilflow.labels, M, I) {
 		W <- xn_minus_x_bar %*% Ez %*% solve(sum_Ezz + diag(sigma2 * alpha));
 
 		# sigma_new^2 = 1/ND sum{ |x_n-x^bar|^2 - 2E[z_n]^T W^T (x_n-x^bar) + Tr(E[z_n z_n^T] W^T W) } (PRML 12.57)
-		sigma2 <- sum(xn_minus_x_bar^2) - 2 * sum(diag(Ez %*% t(W) %*% xn_minus_x_bar));
+		sigma2 <- sum(xn_minus_x_bar^2) - 2 * sum(diag(t(W) %*% xn_minus_x_bar %*% Ez));
 		for(n in 1:N) {
 			sigma2 <- sigma2 + sum(diag(Ezz[[n]] %*% t(W) %*% W));
 		}
@@ -63,13 +65,26 @@ ppca_bayes <- function(oilflow, oilflow.labels, M, I) {
 		# alpha_i = D / w_i^T w_i (PRML 12.62)
 		alpha <- D / diag(t(W) %*% W);
 
-		cat(sprintf("I=%d, alpha=(%s)\n", i, paste(sprintf(" %.2f",alpha),collapse=",")));
+		cat(sprintf("M=%d, I=%d, alpha=(%s)\n", M, i, paste(sprintf(" %.2f",alpha),collapse=",")));
 	}
 
-	png();
-	plot(Ez[,order(alpha, decreasing=T)[1:2]], col=col, pch=pch, xlim=c(-3,3),ylim=c(-3,3),ylab="",
-			xlab=sprintf("M=%d, I=%d, alpha=(%s)\n", M, i, paste(sprintf(" %.2f",alpha),collapse=",")));
+	# draw chart
+	draw_chart <- function(targets) {
+		plot(Ez[,targets], col=col, pch=pch, xlim=c(-3,3), ylim=c(-3,3),
+				#main=sprintf("M=%d, I=%d, alpha=(%s)\n", M, i, paste(sprintf(" %.2f",alpha), collapse=",")),
+				xlab=sprintf("alpha=%.2f", alpha[targets[1]]),
+				ylab=sprintf("alpha=%.2f", alpha[targets[2]])
+		);
+	};
+	png(width=640, height=640);
+	par(mfrow=c(splits, splits), mar=c(4, 4, 2, 2));
+	for(i in 1:(M-1)) for(j in (i+1):M) draw_chart(c(i, j));
+	#for(angle in 10:80) scatterplot3d(Ez[,1], Ez[,2], Ez[,3], color=col, pch=pch, xlim=c(-3,3), ylim=c(-3,3), zlim=c(-3,3), angle=angle*2);
 };
 
-ppca_bayes(oilflow, oilflow.labels, M, I);
+ppca_bayes()
+
+#library(scatterplot3d);
+#library(animation);
+#saveMovie(ppca_bayes(), interval=0.05, moviename="ppca_bayes", movietype="gif", outdir=getwd(),width=480, height=480);
 
