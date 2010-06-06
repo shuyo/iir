@@ -15,6 +15,12 @@ if (length(argv)>3) splits <- as.integer(commandArgs(T)[4]);
 oilflow <- as.matrix(read.table(sprintf("%s/DataTrn.txt", directory)));
 oilflow.labels <- read.table(sprintf("%s/DataTrnLbls.txt", directory));
 
+# density function of multivariate Gaussian
+dmnorm <- function(x, mu, sig) {
+	D <- length(mu);
+	1/((2 * pi)^D * sqrt(det(sig))) * exp(- t(x-mu) %*% solve(sig) %*% (x-mu) / 2)[1];
+}
+
 ppca_bayes <- function() {
 	D <- ncol(oilflow);
 	N <- nrow(oilflow);
@@ -23,8 +29,8 @@ ppca_bayes <- function() {
 
 	# initialize parameters
 	W <- matrix(rnorm(M*D), D);
-	sigma2 <- rnorm(1);
-	alpha <- rep(1, M);
+	sigma2 <- rgamma(1,1);
+	alpha <- c(1, rep(10000, M-1));
 
 	# mu = mean x_bar
 	mu <- colMeans(oilflow);
@@ -63,9 +69,14 @@ ppca_bayes <- function() {
 		sigma2 <- sigma2 / N / D;
 
 		# alpha_i = D / w_i^T w_i (PRML 12.62)
-		alpha <- D / diag(t(W) %*% W);
+		if (i>0) alpha <- D / diag(t(W) %*% W);
 
 		cat(sprintf("M=%d, I=%d, alpha=(%s)\n", M, i, paste(sprintf(" %.2f",alpha),collapse=",")));
+		if (sum(alpha>1e6)){
+			W <- W[,alpha<1e6];
+			alpha <- alpha[alpha<1e6];
+			M <- length(alpha);
+		}
 	}
 
 	# draw chart
@@ -78,7 +89,7 @@ ppca_bayes <- function() {
 	};
 	png(width=640, height=640);
 	par(mfrow=c(splits, splits), mar=c(4, 4, 2, 2));
-	for(i in 1:(M-1)) for(j in (i+1):M) draw_chart(c(i, j));
+	#for(i in 1:(M-1)) for(j in (i+1):M) draw_chart(c(i, j));
 	#for(angle in 10:80) scatterplot3d(Ez[,1], Ez[,2], Ez[,3], color=col, pch=pch, xlim=c(-3,3), ylim=c(-3,3), zlim=c(-3,3), angle=angle*2);
 };
 
