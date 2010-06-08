@@ -20,7 +20,7 @@ ppca_em <- function(oilflow, oilflow.labels, M, I) {
 
 	# initialize parameters
 	W <- matrix(rnorm(M*D), D);
-	sigma2 <- rnorm(1);
+	sigma2 <- rgamma(1,1,1);
 
 	# mu = mean x_bar
 	mu <- colMeans(oilflow);
