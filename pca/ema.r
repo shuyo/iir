@@ -52,7 +52,7 @@ ppca_em <- function(oilflow, oilflow.labels, M, I) {
 		likelihood <- - N / 2 * ( D * log(2 * pi) + log(det(C)) + sum(diag(C_inv %*% S)) ); # (PRML 12.44)
 		plot(Ez, col=col, pch=pch, xlim=c(-3,3),ylim=c(-3,3),ylab="",
 			xlab=sprintf("I=%d, log likelihood=%.3f", i, likelihood))
-		if ((likelihood - likelihood.pre) < 0.001) break;
+		if (i>5 && (likelihood - likelihood.pre) < 0.001) break;
 		likelihood.pre <- likelihood;
 
 		### M-step:
@@ -61,7 +61,7 @@ ppca_em <- function(oilflow, oilflow.labels, M, I) {
 		W <- xn_minus_x_bar %*% Ez %*% solve(sum_Ezz);
 
 		# sigma_new^2 = 1/ND sum{ |x_n-x^bar|^2 - 2E[z_n]^T W^T (x_n-x^bar) + Tr(E[z_n z_n^T] W^T W) } (PRML 12.57)
-		sigma2 <- sum(xn_minus_x_bar^2) - 2 * sum(diag(Ez %*% t(W) %*% xn_minus_x_bar));
+		sigma2 <- sum(xn_minus_x_bar^2) - 2 * sum(diag(t(W) %*% xn_minus_x_bar %*% Ez));
 		for(n in 1:N) {
 			sigma2 <- sigma2 + sum(diag(Ezz[[n]] %*% t(W) %*% W));
 		}
