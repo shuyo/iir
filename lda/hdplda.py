@@ -4,6 +4,7 @@
 import sys, re
 from optparse import OptionParser
 import scipy.stats
+import scipy.special
 
 def load_corpus(filename):
     corpus = []
@@ -93,19 +94,39 @@ class HDPLDA:
         return 1.0 / len(self.vocas)
 
     def f_k_x_jt(self, k, j, t):
-        t_i = self.t_ji[j]
-        x_jt = [i for i in range(len(t_i)) if t_i[i]==t]
-        f = 1.0
-        for i in x_jt:
-            f *= self.f_k_x_ji(k, j, i)
-        return f
+        if self.k_jt[j][t] != k:
+            return 1 / (self.n_k[k] + self.beta * len(self.vocas))
+
+        n_kv = self.n_kv[k].copy()
+        p = 1.0
+        #print self.x_ji[j]
+        #print self.t_ji[j]
+        #print n_kv
+        for i in range(len(self.x_ji[j])):
+            if self.t_ji[j][i] == t:
+                v = self.x_ji[j][i]
+                p *= n_kv[v] + self.beta
+                n_kv[v] += 1
+        return p / (self.n_k[k] + self.beta * len(self.vocas))
 
     def f_k_new_x_jt(self, j, t):
-        # TODO
-        pass
-        return 1
+        p = 1.0
+        n_tv = dict()
+        for i in range(len(self.x_ji[j])):
+            if self.t_ji[j][i] == t:
+                v = self.x_ji[j][i]
+                if v not in n_tv: n_tv[v] = 0
+                p *= n_tv[v] + self.beta
+                n_tv[v] += 1
+
+        for n in range(self.n_jt[j][t]):
+            p /= n + self.beta * len(self.vocas)
+
+        return p
 
     def sampling_t(self, j, i):
+        assert [sum(x.values()) for x in self.n_kv] == self.n_k
+
         v = self.x_ji[j][i]
         t_old = self.t_ji[j][i]
         k_old = self.k_jt[j][t_old]
@@ -158,16 +179,17 @@ class HDPLDA:
                 self.n_jt[j].append(0)
                 self.k_jt[j].append(0)
             self.tables[j].append(t_new)
+            self.n_tables += 1
             self.m_j[j] += 1
 
             # sampling of k (新しいテーブルの料理(トピック))
             p_k = []
             Z_p_k = 0
             for k in self.topics:
-                p = self.m_k[k] * self.f_k_x_jt(k, j, t_new)
+                p = self.m_k[k] * self.f_k_x_ji(k, j, i)
                 p_k.append(p)
                 Z_p_k += p
-            p = self.gamma * self.f_k_new_x_jt(j, t_new)
+            p = self.gamma * self.f_k_new_x_ji()
             p_k.append(p)
             Z_p_k += p
 
@@ -202,17 +224,74 @@ class HDPLDA:
             self.n_kv[k_new][v] += 1
         else:
             self.n_kv[k_new][v] = 1
+        assert [sum(x.values()) for x in self.n_kv] == self.n_k
+
 
     def sampling_k(self, j, t):
-        k = k_jt[j][t]
-        # TODO
-        pass
+        #print "j = ", j, ", t = ", t
+        #self.dump()
+
+        k_old = self.k_jt[j][t]
+        self.m_k[k_old] -= 1
+        self.n_k[k_old] -= self.n_jt[j][t]
+        if self.m_k[k_old] > 0:
+            for i in range(len(self.x_ji[j])):
+                if self.t_ji[j][i] == t:
+                    v = self.x_ji[j][i]
+                    assert self.n_kv[k_old][v] > 0
+                    self.n_kv[k_old][v] -= 1
+        else:
+            assert self.n_k[k_old] == 0
+            self.n_kv[k_old] = dict()
+            self.topics.remove(k_old)
+
+        # sampling of k
+        p_k = []
+        Z_p_k = 0
+        for k in self.topics:
+            p = self.m_k[k] * self.f_k_x_jt(k, j, t)
+            p_k.append(p)
+            Z_p_k += p
+        p = self.gamma * self.f_k_new_x_jt(j, t)
+        p_k.append(p)
+        Z_p_k += p
+
+        p_k = [p / Z_p_k for p in p_k]
+        dist = scipy.stats.rv_discrete(values=(self.topics + [-1], p_k))
+        k_new = dist.rvs()
+        #print "p_k:", p_k, ", k_new:", k_new
+
+        # 新しいトピック
+        if k_new < 0:
+            # 空きトピックIDを取得
+            for k_new in range(len(self.n_k)):
+                if k_new not in self.topics: break
+            else:
+                # 新しいテーブルID
+                k_new = len(self.n_k)
+                self.n_k.append(0)
+                self.m_k.append(0)
+                self.n_kv.append(dict())
+            self.topics.append(k_new)
+
+        self.k_jt[j][t] = k_new
+        self.m_k[k_new] += 1
+        self.n_k[k_new] += self.n_jt[j][t]
+        for i in range(len(self.x_ji[j])):
+            if self.t_ji[j][i] == t:
+                v = self.x_ji[j][i]
+                if v in self.n_kv[k_new]:
+                    self.n_kv[k_new][v] += 1
+                else:
+                    self.n_kv[k_new][v] = 1
 
     def inference(self):
         for j in range(len(self.x_ji)):
             for i in range(len(self.x_ji[j])):
                 #print "---- j, i:", j, i
                 self.sampling_t(j, i)
+            for t in self.tables[j]:
+                self.sampling_k(j, t)
 
 
 def main():
