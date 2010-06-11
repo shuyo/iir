@@ -60,4 +60,5 @@ hist(zlist, breaks=30, main=sprintf("E(z)=z(z-1)(z-4)(z-6)/12, mean=%.3f, var=%.
 par(new=T);
 plot(function(z)exp(-z*(z-1)*(z-4)*(z-6)/12), xlim=c(-2,8), col="red", ann=F, yaxt="n");
 
+plot(zlist, type="l");
 acf(zlist);
