@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # Hidden Markov Model
 
-import sys, re, math
+import sys, re
 from optparse import OptionParser
 #import scipy.stats
 import numpy
@@ -14,7 +14,7 @@ def load_corpus(filename):
     f = open(filename, 'r')
     for line in f:
         doc = re.findall(r'\w+(?:-\w+)?(?:\'\w+)?',line)
-        if len(doc)>0: corpus.append(doc)
+        if len(doc)>0: corpus.append([x.lower() for x in doc])
     f.close()
     return corpus
 
@@ -53,6 +53,12 @@ class HMM:
         # emission
         self.B = numpy.ones((self.V, self.K)) / self.V
 
+    def id2words(self, x):
+        return [self.vocas[v] for v in x]
+
+    def words2id(self, x):
+        return [self.vocas_id[v] for v in x]
+
     def dump(self):
         print "V:", self.V
         print "pi:", self.pi
@@ -80,7 +86,7 @@ class HMM:
         for n in range(N-1, 0, -1):
             beta[n-1] = numpy.dot(self.A, beta[n] * self.B[x[n]]) / c[n]
 
-        likelihood = numpy.prod(c)
+        likelihood = numpy.log(c).sum()
         gamma = [a * b for a, b in zip(alpha, beta)]
         xi = [ self.A * numpy.dot(alpha[n-1].T, self.B[x[n]] * beta[n]) / c[n] for n in range(1, N)]
 
@@ -93,7 +99,7 @@ class HMM:
         log_likelihood = 0
         for x in self.x_ji:
             gamma, xi, likelihood = self.Estep(x)
-            log_likelihood += math.log(likelihood)
+            log_likelihood += likelihood
 
             # M-step
             pi_new += gamma[1]
@@ -106,6 +112,30 @@ class HMM:
         self.B = B_new / B_new.sum(0)
 
         return log_likelihood
+
+    def generate(self):
+        z = numpy.random.multinomial(1, self.pi).argmax()
+        x_n = []
+        while 1:
+            v = numpy.random.multinomial(1, self.B[:,z]).argmax()
+            if v==0: break
+            x_n.append(self.vocas[v])
+            z = numpy.random.multinomial(1, self.A[z]).argmax()
+        return x_n
+
+    def Viterbi(self, x):
+        N = len(x)
+        w = numpy.log(self.pi) + numpy.log(self.B[x[0]])
+        argmax_z_n = []
+        for n in range(1, N):
+            mes = numpy.log(self.A) + w[:, numpy.newaxis] # max_{z_n}( ln p(z_{n+1}|z_n) + w(z_n) )
+            argmax_z_n.append(mes.argmax(0))
+            w = numpy.log(self.B[x[n]]) + mes.max(0)
+        z = [0] * N
+        z[N-1] = w.argmax()
+        for n in range(N-1, 0, -1):
+            z[n-1] = argmax_z_n[n-1][z[n]]
+        return z
 
 def main():
     parser = OptionParser()
@@ -121,10 +151,19 @@ def main():
 
     hmm = HMM(options.K, options.a, options.triangle)
     hmm.set_corpus(corpus)
+    pre_L = -1e10
     for i in range(options.I):
         log_likelihood = hmm.inference()
         print i, ":", log_likelihood
+        if pre_L > log_likelihood: break
+        pre_L = log_likelihood
     hmm.dump()
+
+    for i in range(10):
+        print " ".join(hmm.generate())
+
+    for x in corpus:
+        print zip(x, hmm.Viterbi(hmm.words2id(x)))
 
 
 if __name__ == "__main__":
