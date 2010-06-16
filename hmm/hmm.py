@@ -19,21 +19,9 @@ def load_corpus(filename):
     return corpus
 
 class HMM:
-    def __init__(self, K, a, triangle=False):
-        self.K = K
-
-        # transition
-        self.pi = dirichlet([a] * self.K) # numpy.ones(self.K) / self.K
-        if triangle:
-            self.A = numpy.zeros((self.K, self.K))
-            for i in range(self.K):
-                self.A[i, i:self.K] = dirichlet([a] * (self.K - i))
-        else:
-            self.A = dirichlet([a] * self.K, self.K)
-
-    def set_corpus(self, corpus):
+    def set_corpus(self, corpus, end_of_sentense=False):
         self.x_ji = [] # vocabulary for each document and term
-        self.vocas = ["(END)"]
+        if end_of_sentense: self.vocas = ["(END)"] # END OF SENTENCE
         self.vocas_id = dict()
 
         for doc in corpus:
@@ -46,12 +34,46 @@ class HMM:
                 else:
                     voca_id = self.vocas_id[term]
                 x_i.append(voca_id)
-            x_i.append(0) # END MARK
+            if end_of_sentense: x_i.append(0) # END OF SENTENCE
             self.x_ji.append(x_i)
         self.V = len(self.vocas)
 
+    def init_inference(self, K, a, triangle=False):
+        self.K = K
+
+        # transition
+        self.pi = dirichlet([a] * self.K) # numpy.ones(self.K) / self.K
+        if triangle:
+            self.A = numpy.zeros((self.K, self.K))
+            for i in range(self.K):
+                self.A[i, i:self.K] = dirichlet([a] * (self.K - i))
+        else:
+            self.A = dirichlet([a] * self.K, self.K)
+
         # emission
-        self.B = numpy.ones((self.V, self.K)) / self.V
+        self.B = numpy.ones((self.V, self.K)) / self.V  # numpy.tile(1.0 / self.V, (self.V, self.K))
+
+    def save(file):
+        numpy.save(file,
+            x_ji = self.x_ji,
+            vocas = self.vocas,
+            vocas_id = self.vocas_id,
+            K = self.K,
+            pi = self.pi,
+            A = self.A,
+            B = self.B
+        )
+
+    def load(file):
+        x = numpy.load(file)
+        self.x_ji = x['x_ji']
+        self.vocas = x['vocas']
+        self.vocas_id = x['vocas_id']
+        self.K = x['K']
+        self.pi = x['pi']
+        self.A = x['A']
+        self.B = x['B']
+        self.V = len(self.vocas)
 
     def id2words(self, x):
         return [self.vocas[v] for v in x]
@@ -93,6 +115,10 @@ class HMM:
         return (gamma, xi, likelihood)
 
     def inference(self):
+        """
+        @brief one step of EM algorithm
+        @return log likelihood
+        """
         pi_new = numpy.zeros(self.K)
         A_new = numpy.zeros((self.K, self.K))
         B_new = numpy.zeros((self.V, self.K))
@@ -113,7 +139,7 @@ class HMM:
 
         return log_likelihood
 
-    def generate(self):
+    def sampling(self):
         z = numpy.random.multinomial(1, self.pi).argmax()
         x_n = []
         while 1:
@@ -149,8 +175,9 @@ def main():
 
     corpus = load_corpus(options.filename)
 
-    hmm = HMM(options.K, options.a, options.triangle)
-    hmm.set_corpus(corpus)
+    hmm = HMM()
+    hmm.set_corpus(corpus, end_of_sentense=True)
+    hmm.init_inference(options.K, options.a, options.triangle)
     pre_L = -1e10
     for i in range(options.I):
         log_likelihood = hmm.inference()
@@ -160,7 +187,7 @@ def main():
     hmm.dump()
 
     for i in range(10):
-        print " ".join(hmm.generate())
+        print " ".join(hmm.sampling())
 
     for x in corpus:
         print zip(x, hmm.Viterbi(hmm.words2id(x)))
