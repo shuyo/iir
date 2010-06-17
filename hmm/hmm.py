@@ -110,9 +110,15 @@ class HMM:
 
         likelihood = numpy.log(c).sum()
         gamma = [a * b for a, b in zip(alpha, beta)]
-        xi = [ self.A * numpy.dot(alpha[n-1].T, self.B[x[n]] * beta[n]) / c[n] for n in range(1, N)]
 
-        return (gamma, xi, likelihood)
+        # It spends a lot of memory to preserve each xi.
+        # xi = [ self.A * numpy.dot(alpha[n-1].T, self.B[x[n]] * beta[n]) / c[n] for n in range(1, N)]
+        xi_sum = numpy.dot(alpha[0].T, self.B[x[1]] * beta[1]) / c[1]
+        for n in range(2, N):
+            xi_sum += numpy.dot(alpha[n-1].T, self.B[x[n]] * beta[n]) / c[n]
+        xi_sum *= self.A
+
+        return (gamma, xi_sum, likelihood)
 
     def inference(self):
         """
@@ -124,12 +130,12 @@ class HMM:
         B_new = numpy.zeros((self.V, self.K))
         log_likelihood = 0
         for x in self.x_ji:
-            gamma, xi, likelihood = self.Estep(x)
+            gamma, xi_sum, likelihood = self.Estep(x)
             log_likelihood += likelihood
 
             # M-step
             pi_new += gamma[1]
-            A_new += sum(xi) #reduce(lambda x, y: x + y, xi)
+            A_new += xi_sum
             for v, g_n in zip(x, gamma):
                 B_new[v] += g_n
 
