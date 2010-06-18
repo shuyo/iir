@@ -1,10 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# Hierarchical Dirichlet Process - Latent Dirichlet Allocation
+# (c)2010 Nakatani Shuyo / Cybozu Labs Inc.
+# (refer to "Hierarchical Dirichlet Processes"(Teh et.al, 2005))
+
 import sys, re, math
 from optparse import OptionParser
-import scipy.stats
 from scipy.special import gammaln
+import scipy.stats
 
 def load_corpus(filename):
     corpus = []
@@ -16,9 +20,9 @@ def load_corpus(filename):
     return corpus
 
 class HDPLDA:
-    def __init__(self, alpha, beta, gamma):
+    def __init__(self, alpha, gamma, base):
         self.alpha = alpha
-        self.beta = beta
+        self.base = base
         self.gamma = gamma
 
     def set_corpus(self, corpus):
@@ -79,7 +83,7 @@ class HDPLDA:
     # n_??/m_? を用いて f_k を高速に計算
     def f_k_x_ji_fast(self, k, j, i):
         n_kv = self.n_kv[k].get(self.x_ji[j][i], 0)
-        return (n_kv + self.beta) / (self.n_k[k] + self.beta * len(self.vocas))
+        return (n_kv + self.base) / (self.n_k[k] + self.base * len(self.vocas))
 
     def f_k_new_x_ji_fast(self):
         return 1.0 / len(self.vocas)
@@ -87,14 +91,14 @@ class HDPLDA:
     def log_f_k_x_jt_fast(self, k, j, t):
         return self.log_f_k_new_x_jt_fast(j, t, self.n_kv[k].copy(), self.n_k[k])
 
-    # 浮動小数点の範囲を超えて非常に小さい値になることがあるので、対数を返す
+    # 浮動小数の範囲を超えて非常に小さい値になることがあるので、対数を返す
     def log_f_k_new_x_jt_fast(self, j, target_t, n_v = False, n = 0):
         if not n_v: n_v = dict()
-        Vbeta = self.beta * len(self.vocas)
+        Vbase = self.base * len(self.vocas)
         p = 0.0
         for v, t in zip(self.x_ji[j], self.t_ji[j]):
             if t != target_t: continue
-            p += math.log(n_v.setdefault(v, 0) + self.beta) - math.log(n + Vbeta)
+            p += math.log(n_v.setdefault(v, 0) + self.base) - math.log(n + Vbase)
             n_v[v] += 1
             n += 1
         return p
@@ -103,29 +107,29 @@ class HDPLDA:
     # p(x_{guard}|X_k^{-guard}) の分子 p(x_{guard}, X_k^{-guard}) と分母 p(X_k^{-guard}) を
     # n_??/m_?? を用いずに計算( x_ji, t_ji, k_jt のみ参照 )
     # ただし固定の正規化項 Γ(Σβ)/ΠΓ(β) は含まない
-    # 浮動小数点の範囲を超えて非常に小さい値になることがあるので、対数を返す
-    def log_p_X_k(self, target_k, gaurd, isdenom=False):
+    # 浮動小数の範囲を超えて非常に小さい値になることがあるので、対数を返す
+    def log_p_X_k(self, target_k, gaurd, is_denom=False):
         V = len(self.vocas)
         n_v = [0] * V
         for j in range(len(self.x_ji)):
             for i in range(len(self.x_ji[j])):
                 t = self.t_ji[j][i]
                 k = self.k_jt[j][t]
-                g = gaurd(j,i,t)
-                if (k == target_k and not g) or (isdenom and g):
+                g = gaurd(j, i, t)
+                if (k == target_k and not g) or (is_denom and g):
                     n_v[self.x_ji[j][i]] += 1
-        return sum([gammaln(self.beta + n) for n in n_v]) - gammaln(self.beta * V + sum(n_v))
+        return sum([gammaln(self.base + n) for n in n_v]) - gammaln(self.base * V + sum(n_v))
 
     # p(x_ji|X_k^{-ji})
     def f_k_x_ji(self, k, target_j, target_i):
         guard = lambda j,i,t:j == target_j and i == target_i
-        return math.exp(self.log_p_X_k(k, guard, isdenom=True) - self.log_p_X_k(k, guard))
+        return math.exp(self.log_p_X_k(k, guard, is_denom=True) - self.log_p_X_k(k, guard))
 
     # p(x_jt|X_k^{-jt})
-    # 浮動小数点の範囲を超えて非常に小さい値になることがあるので、対数を返す
+    # 浮動小数の範囲を超えて非常に小さい値になることがあるので、対数を返す
     def log_f_k_x_jt(self, k, target_j, target_t):
         guard = lambda j,i,t:j == target_j and t == target_t
-        return self.log_p_X_k(k, guard, isdenom=True) - self.log_p_X_k(k, guard)
+        return self.log_p_X_k(k, guard, is_denom=True) - self.log_p_X_k(k, guard)
 
 
     # 分布から k をサンプリング
@@ -150,7 +154,7 @@ class HDPLDA:
             self.topics.append(k_new)
         return k_new
 
-    # 新しいテーブル
+    # 客 x_ji を新しいテーブルに案内
     # テーブルのトピック(料理)もサンプリング
     def new_table(self, j, i):
         # 空きテーブルIDを取得
@@ -251,10 +255,9 @@ class HDPLDA:
         p = math.log(self.gamma) + f
         log_p_k.append(p)
 
-        # 確率が小さくなりすぎるので log で保持。最大値を引いてから正規化
+        # 確率が小さくなりすぎるので log で保持。最大値を引いてからexp&正規化
         max_log_p_k = max(log_p_k)
         p_k = [math.exp(p - max_log_p_k) for p in log_p_k]
-
         k_new = self.sampling_topic(p_k)
 
         # パラメータの更新
@@ -273,13 +276,19 @@ class HDPLDA:
             for t in self.tables[j]:
                 self.sampling_k(j, t)
 
+    def perplexity(self, doc):
+        log_p = 0.0
+        for word in doc:
+            log_p += 0
+            pass
+        return exp(-log_p / len(doc))
 
 def main():
     parser = OptionParser()
     parser.add_option("-f", dest="filename", help="corpus filename")
     parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha")
-    parser.add_option("--beta", dest="beta", type="float", help="parameter beta")
     parser.add_option("--gamma", dest="gamma", type="float", help="parameter gamma")
+    parser.add_option("--base", dest="base", type="float", help="parameter of base probability measure H")
     parser.add_option("-i", dest="iteration", type="int", help="iteration count")
     (options, args) = parser.parse_args()
     if not options.filename: parser.error("need corpus filename(-f)")
@@ -287,12 +296,12 @@ def main():
     corpus = load_corpus(options.filename)
 
     alpha = options.alpha or scipy.stats.gamma.rvs(1,scale=1)
-    beta  = options.beta  or 0.5
     gamma = options.gamma or scipy.stats.gamma.rvs(1,scale=1)
+    base  = options.base  or 0.5
     iteration = options.iteration or 10
-    print "alpha=", alpha, " beta=", beta, " gamma=", gamma
+    print "alpha=", alpha, " gamma=", gamma, " base=", base
 
-    hdplda = HDPLDA( alpha, beta, gamma )
+    hdplda = HDPLDA( alpha, gamma, base )
     hdplda.set_corpus(corpus)
     hdplda.dump(True)
 

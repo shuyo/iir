@@ -71,11 +71,15 @@ class PLSI
       #n_w_j_d_i = n_w_j[i]
       n_w_j.each do |i, n_w_j_d_i|
 
+        # E-step
         posterior_denom = 0
         posterior_numers = Array.new(K)
         (0..K-1).each do |k|
+          # p(z=k)p(x|z)p(y|z)
           posterior_denom += (posterior_numers[k] = @z_k[k] * @d_i_z_k[k][i] * @w_j_z_k[k][j])
         end
+
+        # M-step
         posterior_numers.each_with_index do |posterior_numer, k|
           x = n_w_j_d_i * posterior_numer / posterior_denom
           new_z_k_numer[k] += x

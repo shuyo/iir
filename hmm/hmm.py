@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # Hidden Markov Model
 
-import sys, re
+import sys, os, re, pickle
 from optparse import OptionParser
 #import scipy.stats
 import numpy
@@ -18,11 +18,12 @@ def load_corpus(filename):
     f.close()
     return corpus
 
-class HMM:
+class HMM(object):
     def set_corpus(self, corpus, end_of_sentense=False):
         self.x_ji = [] # vocabulary for each document and term
-        if end_of_sentense: self.vocas = ["(END)"] # END OF SENTENCE
+        self.vocas = []
         self.vocas_id = dict()
+        if end_of_sentense: self.vocas.append("(END)") # END OF SENTENCE
 
         for doc in corpus:
             x_i = []
@@ -53,27 +54,29 @@ class HMM:
         # emission
         self.B = numpy.ones((self.V, self.K)) / self.V  # numpy.tile(1.0 / self.V, (self.V, self.K))
 
-    def save(file):
-        numpy.save(file,
-            x_ji = self.x_ji,
+    def save(self, file):
+        numpy.savez(file + ".npz",
+            x_ji = pickle.dumps(self.x_ji),
             vocas = self.vocas,
-            vocas_id = self.vocas_id,
+            vocas_id = pickle.dumps(self.vocas_id),
             K = self.K,
             pi = self.pi,
             A = self.A,
             B = self.B
         )
 
-    def load(file):
+    def load(self, file):
+        if not os.path.exists(file): file += ".npz"
         x = numpy.load(file)
-        self.x_ji = x['x_ji']
+        self.x_ji = pickle.loads(x['x_ji'])
         self.vocas = x['vocas']
-        self.vocas_id = x['vocas_id']
+        self.vocas_id = pickle.loads(x['vocas_id'])
         self.K = x['K']
         self.pi = x['pi']
         self.A = x['A']
         self.B = x['B']
         self.V = len(self.vocas)
+        print self.vocas_id["html"]
 
     def id2words(self, x):
         return [self.vocas[v] for v in x]
