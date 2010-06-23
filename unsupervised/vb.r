@@ -167,7 +167,7 @@ if (length(argv)>0) alpha_0 <- as.numeric(commandArgs(T))[1];
 # main
 sink(format(Sys.time(), "vb%m%d%H%M.txt"));
 
-I <- 10;
+I <- 5;
 count <- 1;
 for(K in 2:6) for(beta_0 in 1:20/20) for(nu_0 in ncol(xx)-1+1:20/2) {
 	#cat(sprintf("#%d: K=%d, alpha=%f, beta=%f, nu=%f\n", count, K, alpha_0, beta_0, nu_0));

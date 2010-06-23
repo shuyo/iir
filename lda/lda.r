@@ -1,6 +1,6 @@
 
-K <- 20;
-I <- 100;
+K <- 50;
+I <- 200;
 
 filename <- "../data/gift_of_magi.txt";
 argv <- commandArgs(T);

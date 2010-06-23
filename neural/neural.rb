@@ -380,12 +380,11 @@ class Network
     end
 
     if @softmax_output
-      proc << "max_a=[#{@out_list.map{|unit| unit.name}.join(',')}].max"
-      proc << "sum_exp_a=0"
+      #proc << "max_a=[#{@out_list.map{|unit| unit.name}.join(',')}].max"
       @out_list.each do |unit|
-        proc << "e_#{unit.name}=Math.exp(#{unit.name}-max_a)"
-        proc << "sum_exp_a+=e_#{unit.name}"
+        proc << "e_#{unit.name}=Math.exp(#{unit.name})" #-max_a)"
       end
+      proc << "sum_exp_a=#{@out_list.map{|u| "e_"+u.name}.join('+')}"
       @out_list.each do |unit|
         proc << "r_[#{@unit_index[unit]}]=e_#{unit.name}/sum_exp_a"
       end
