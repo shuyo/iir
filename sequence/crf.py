@@ -29,44 +29,67 @@ def load_text(filename, limit=1e9):
 class FeatureVector(object):
     def __init__(self, features, ylist, xlist):
         '''statistics of features (sufficient statistics like)'''
-        flist = features.features
-        glist = features.features_edge
+        flist = features.features_edge
+        glist = features.features
         self.K = len(features.labels)
 
-        self.Fss = numpy.zeros(len(flist), dtype=int)
-        for y1, x1 in zip(ylist, xlist):
-            self.Fss += [f(x1, y1) for f in flist]
-
-        self.Gss = numpy.zeros(len(glist), dtype=int)
+        # expectation of features under empirical distribution
+        self.Fss = numpy.zeros(len(flist) + len(glist), dtype=int)
         for y1, y2 in zip(["start"] + ylist, ylist + ["end"]):
-            self.Gss += [g(y1, y2) for g in glist]
+            self.Fss[:len(flist)] += [f(y1, y2) for f in flist]
+        for y1, x1 in zip(ylist, xlist):
+            self.Fss[len(flist):] += [g(x1, y1) for g in glist]
 
-        self.Fmat = []
-        self.Gmat = []
+        # index list of ON values of edge features
+        self.Fon = [] # (n, #f, indexes)
+
+        # for calculation of M_i
+        self.Fmat = [] # (n, K, #f, K)-matrix
+        self.Gmat = [] # (n, #g, K)-matrix
         for x in xlist:
+            mt = numpy.zeros((len(glist), self.K), dtype=int)
+            for j, g in enumerate(glist):
+                mt[j] = [g(x, y) for y in features.labels]  # sparse
+            self.Gmat.append(mt)
+
+            # when fmlist depends on x_i (if necessary)
+            #self._calc_fmlist(flist, x)
+
+        # when fmlist doesn't depend on x_i
+        self._calc_fmlist(features)
+
+
+    def _calc_fmlist(self, features):
+        flist = features.features_edge
+        fmlist = []
+        f_on = [[] for f in flist]
+        for k1, y1 in enumerate(features.labels):
             mt = numpy.zeros((len(flist), self.K), dtype=int)
             for j, f in enumerate(flist):
-                mt[j] = [f(x, y) for y in features.labels]
-            self.Fmat.append(mt)
+                mt[j] = [f(y1, y2) for y2 in features.labels]  # sparse
+                f_on[j].extend([k1 * self.K + k2 for k2, v in enumerate(mt[j]) if v == 1])
+            fmlist.append(mt)
+        self.Fmat.append(fmlist)
+        self.Fon.append(f_on)
 
-            gmlist = []
-            for y1 in features.labels:
-                mt = numpy.zeros((len(glist), self.K), dtype=int)
-                for j, g in enumerate(glist):
-                    mt[j] = [g(y1, y2) for y2 in features.labels]
-                gmlist.append(mt)
-            self.Gmat.append(gmlist)
-
-    def cost(self, theta_f, theta_g):
-        return numpy.dot(theta_f, self.Fss) + numpy.dot(theta_g, self.Gss)
+    def cost(self, theta):
+        return numpy.dot(theta, self.Fss)
 
     def logMlist(self, theta_f, theta_g):
+        '''for independent fmlists on x_i'''
+        fv = numpy.zeros((self.K, self.K))
+        for j, fm in enumerate(self.Fmat[0]):
+            fv[j] = numpy.dot(theta_f, fm)
+        return [fv + numpy.dot(theta_g, gm) for gm in self.Gmat]
+
+    def logMlist2(self, theta_f, theta_g):
+        '''for dependent fmlists on x_i'''
         Mlist = []
-        for fm, gmlist in zip(self.Fmat, self.Gmat):
-            gv = numpy.zeros((self.K, self.K))
-            for j, gm in enumerate(gmlist):
-                gv[j] = numpy.dot(theta_g, gm)
-            Mlist.append(gv + numpy.dot(theta_f, fm))
+        for gm, fmlist in zip(self.Gmat, self.Fmat):
+            fv = numpy.zeros((self.K, self.K))
+            for j, fm in enumerate(fmlist):
+                fv[j] = numpy.dot(theta_f, fm)
+            Mlist.append(fv + numpy.dot(theta_g, gm))
         return Mlist
 
 
@@ -92,24 +115,55 @@ class Features(object):
 class CRF(object):
     def __init__(self, features):
         self.features = features
+        #self.pre_theta = numpy.zeros(self.features.size()+ self.features.size_edge())
 
     def random_param(self):
         return numpy.random.randn(self.features.size()+ self.features.size_edge())
 
-    def likelihood(self, fv, theta):
-        theta_f = theta[:self.features.size()]
-        theta_g = theta[self.features.size():]
-
-        Mlist = fv.logMlist(theta_f, theta_g)
+    def logalpha(self, Mlist):
         logalpha = Mlist[0][self.features.start_label_index()] # alpha(1)
         for logM in Mlist[1:]: # n-2
             logalpha = logdotexp_vec_mat(logalpha, logM)
+        return logalpha
 
-        #logbeta = Mlist[-1][:, self.features.stop_label_index()]
-        #for logM in Mlist[-2::-1]:
-        #    logbeta = logdotexp_mat_vec(logM, logbeta)
+    def logbeta(self, Mlist):
+        logbeta = Mlist[-1][:, self.features.stop_label_index()]
+        for logM in Mlist[-2::-1]:
+            logbeta = logdotexp_mat_vec(logM, logbeta)
+        return logbeta
 
-        return fv.cost(theta_f, theta_g) - logalpha[self.features.stop_label_index()]
+    def likelihood(self, fv, theta):
+        '''conditional log likelihood log p(Y|X)'''
+        #print "T" if (theta == self.pre_theta).all() else "F"
+        #self.pre_theta = theta
+
+        n_fe = self.features.size_edge() # number of features on edge
+        Mlist = fv.logMlist(theta[:n_fe], theta[n_fe:])
+
+        log_Z = self.logalpha(Mlist)[self.features.stop_label_index()]
+        return fv.cost(theta) - log_Z
+
+    def gradient_likelihood(self, fv, theta):
+        grad = self.Fss # empirical expectation
+
+        n_fe = self.features.size_edge() # number of features on edge
+        Mlist = fv.logMlist(theta[:n_fe], theta[n_fe:])
+        logalpha = self.logalpha(Mlist)
+        logbeta = self.logbeta(Mlist)
+
+        for i, indexes in enumerate(fv.Fon[0]):
+            pass
+            #grad[:n_fe] -=
+
+        for i, gm in enumerate(fv.Gmat):
+            pass
+            #grad[n_fe:] -=
+
+        # L2-regurality
+        pass
+
+        return grad
+
 
 def logdotexp_vec_mat(loga, logM):
     return numpy.array([maxentropy.logsumexp(loga + x) for x in logM.T], copy=False)
