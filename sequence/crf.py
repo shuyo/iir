@@ -113,8 +113,19 @@ class Features(object):
         self.features_edge.append(f)
 
 class CRF(object):
-    def __init__(self, features):
+    def __init__(self, features, regularity, sigma=1):
         self.features = features
+        if regularity == 0:
+            self.regularity = lambda w:0
+            self.regularity_deriv = lambda w:0
+        elif regularity == 1:
+            self.regularity = lambda w:numpy.sum(numpy.abs(w)) / sigma
+            self.regularity_deriv = lambda w:numpy.sign(w) / sigma
+        else:
+            v = sigma ** 2
+            v2 = v * 2
+            self.regularity = lambda w:numpy.sum(w ** 2) / v2
+            self.regularity_deriv = lambda w:numpy.sum(w) / v
         #self.pre_theta = numpy.zeros(self.features.size()+ self.features.size_edge())
 
     def random_param(self):
@@ -138,31 +149,33 @@ class CRF(object):
         #self.pre_theta = theta
 
         n_fe = self.features.size_edge() # number of features on edge
-        Mlist = fv.logMlist(theta[:n_fe], theta[n_fe:])
+        logMlist = fv.logMlist(theta[:n_fe], theta[n_fe:])
 
-        log_Z = self.logalpha(Mlist)[self.features.stop_label_index()]
-        return fv.cost(theta) - log_Z
+        log_Z = self.logalpha(logMlist)[self.features.stop_label_index()]
+        return fv.cost(theta) - log_Z - self.regularity(theta)
 
     def gradient_likelihood(self, fv, theta):
+        n_fe = self.features.size_edge() # number of features on edge
+        logMlist = fv.logMlist(theta[:n_fe], theta[n_fe:])
+        logalpha = self.logalpha(logMlist)
+        logbeta = self.logbeta(logMlist)
+        log_Z = self.logalpha(logMlist)[self.features.stop_label_index()]
+
         grad = self.Fss # empirical expectation
 
-        n_fe = self.features.size_edge() # number of features on edge
-        Mlist = fv.logMlist(theta[:n_fe], theta[n_fe:])
-        logalpha = self.logalpha(Mlist)
-        logbeta = self.logbeta(Mlist)
+        expect_edge = numpy.sum([numpy.exp(m + b + a[:,numpy.newaxis] - log_Z)
+                            for m, a, b in zip(logMlist, logalpha, logbeta)])
+        for k, indexes in enumerate(fv.Fon[0]):
+            grad[k] -= numpy.sum(expect_edge.take(indexes))
 
-        for i, indexes in enumerate(fv.Fon[0]):
-            pass
-            #grad[:n_fe] -=
+        expect_vertex = numpy.sum([
+                            for a, b in zip(logalpha, logbeta)])
 
+        self.Gmat = [] # (n, #g, K)-matrix
         for i, gm in enumerate(fv.Gmat):
-            pass
-            #grad[n_fe:] -=
+            grad[n_fe:] -= numpy.sum(gm * numpy.exp(logalpha[i] + logbeta[i] - log_Z), axis=1)
 
-        # L2-regurality
-        pass
-
-        return grad
+        return grad - self.regularity_deriv(theta)
 
 
 def logdotexp_vec_mat(loga, logM):
@@ -173,7 +186,7 @@ def logdotexp_mat_vec(logM, logb):
 def main():
     parser = OptionParser()
     parser.add_option("-f", dest="filename", help="text filename")
-    #parser.add_option("-k", dest="K", type="int", help="number of latent states", default=6)
+    parser.add_option("-l", dest="regularity", type="int", help="regularity. 0=none, 1=L1, 2=L2 [2]", default=2)
     #parser.add_option("-a", dest="a", type="float", help="Dirichlet parameter", default=1.0)
     #parser.add_option("-i", dest="I", type="int", help="iteration count", default=10)
     #parser.add_option("-t", dest="triangle", action="store_true", help="triangle")
@@ -204,7 +217,7 @@ def main():
 
     fv = FeatureVector(features, labels, text)
 
-    crf = CRF(features)
+    crf = CRF(features, options.regularity)
     likelihood = lambda x:-crf.likelihood(fv, x)
 
     minL = 1e9
@@ -216,8 +229,9 @@ def main():
             minL = L
             theta = theta1
     print likelihood(theta), theta
-    theta = optimize.fmin_bfgs(likelihood, theta)
-    print likelihood(theta), theta
+    print crf.gradient_likelihood(fv, theta)
+    #theta = optimize.fmin_bfgs(likelihood, theta)
+    #print likelihood(theta), theta
 
 
 if __name__ == "__main__":
