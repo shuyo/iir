@@ -4,7 +4,6 @@
 
 import numpy
 from scipy import optimize, maxentropy
-numpy.set_printoptions(precision=5)
 
 def logdotexp_vec_mat(loga, logM):
     return numpy.array([maxentropy.logsumexp(loga + x) for x in logM.T], copy=False)
@@ -26,7 +25,6 @@ class FeatureVector(object):
                 self.Fss[:len(flist)] += [f(y1, y2) for f in flist]
             for y1, x1 in zip(ylist, xlist):
                 self.Fss[len(flist):] += [g(x1, y1) for g in glist]
-            print self.Fss
 
         # index list of ON values of edge features
         self.Fon = [] # (n, #f, indexes)
@@ -191,7 +189,7 @@ class CRF(object):
         for a in reversed(argmax_y):
             Y.append(a[Y[-1]])
 
-        return numpy.exp(Y[0] - logZ), Y[::-1]
+        return Y[0] - logZ, Y[::-1]
 
     def tagging_verify(self, fv, theta):
         '''verification of tagging'''
@@ -225,7 +223,26 @@ class CRF(object):
 
 
 def main():
-    data = """
+    def load_data(data):
+        texts = []
+        labels = []
+        text = []
+        data = "\n" + data + "\n"
+        for line in data.split("\n"):
+            line = line.strip()
+            if len(line) == 0:
+                if len(text)>0:
+                    texts.append(text)
+                    labels.append(label)
+                text = []
+                label = []
+            else:
+                token, info, chunk = line.split()
+                text.append((token, info))
+                label.append(chunk)
+        return (texts, labels)
+
+    texts, labels = load_data("""
     This DT B-NP
     temblor-prone JJ I-NP
     city NN I-NP
@@ -242,58 +259,109 @@ def main():
     San NNP B-NP
     Francisco NNP I-NP
     . . O
-    """
-    texts = []
-    labels = []
-    text = []
-    data = "\n" + data + "\n"
-    for line in data.split("\n"):
-        line = line.strip()
-        if len(line) == 0:
-            if len(text)>0:
-                texts.append(text)
-                labels.append(label)
-            text = []
-            label = []
-        else:
-            token, info, chunk = line.split()
-            text.append((token, info))
-            label.append(chunk)
+
+    He PRP B-NP
+    reckons VBZ B-VP
+    the DT B-NP
+    current JJ I-NP
+    account NN I-NP
+    deficit NN I-NP
+    will MD B-VP
+    narrow VB I-VP
+    to TO B-PP
+    only RB B-NP
+    # # I-NP
+    1.8 CD I-NP
+    billion CD I-NP
+    in IN B-PP
+    September NNP B-NP
+    . . O
+
+    Meanwhile RB B-ADVP
+    , , O
+    overall JJ B-NP
+    evidence NN I-NP
+    on IN B-PP
+    the DT B-NP
+    economy NN I-NP
+    remains VBZ B-VP
+    fairly RB B-ADJP
+    clouded VBN I-ADJP
+    . . O
+
+    But CC O
+    consumer NN B-NP
+    expenditure NN I-NP
+    data NNS I-NP
+    released VBD B-VP
+    Friday NNP B-NP
+    do VBP B-VP
+    n't RB I-VP
+    suggest VB I-VP
+    that IN B-SBAR
+    the DT B-NP
+    U.K. NNP I-NP
+    economy NN I-NP
+    is VBZ B-VP
+    slowing VBG I-VP
+    that DT B-ADVP
+    quickly RB I-ADVP
+    . . O
+    """)
+
+    test_texts, test_labels = load_data("""
+    Rockwell NNP B-NP
+    said VBD B-VP
+    the DT B-NP
+    agreement NN I-NP
+    calls VBZ B-VP
+    for IN B-SBAR
+    it PRP B-NP
+    to TO B-VP
+    supply VB I-VP
+    200 CD B-NP
+    additional JJ I-NP
+    so-called JJ I-NP
+    shipsets NNS I-NP
+    for IN B-PP
+    the DT B-NP
+    planes NNS I-NP
+    . . O
+    """)
 
     features = Features(labels)
     tokens = dict([(i[0],1) for x in texts for i in x]).keys()
-    print tokens
     infos = dict([(i[1],1) for x in texts for i in x]).keys()
-    print infos
 
-    def gen_f1(label, token):
-        return lambda x, y: 1 if y == label and x[0] == token else 0
-    def gen_f2(label, info):
-        return lambda x, y: 1 if y == label and x[1] == info else 0
     for label in features.labels:
         for token in tokens:
-            features.add_feature( gen_f1(label, token) )
+            features.add_feature( lambda x, y, l=label, t=token: 1 if y==l and x[0]==t else 0 )
         for info in infos:
-            features.add_feature( gen_f2(label, info) )
+            features.add_feature( lambda x, y, l=label, i=info: 1 if y==l and x[1]==i else 0 )
     features.add_feature_edge( lambda y_, y: 0 )
 
     fvs = [FeatureVector(features, x, y) for x, y in zip(texts, labels)]
     fv = fvs[0]
+    text_fv = FeatureVector(features, test_texts[0]) # text sequence without labels
+
 
     crf = CRF(features, 2)
     theta = crf.random_param()
 
-    print "theta:", theta
+    print "features:", features.size()
+    print "labels:", len(features.labels)
+
+    #print "theta:", theta
     print "log likelihood:", crf.likelihood(fvs, theta)
-    prob, ys = crf.tagging(fv, theta)
+    prob, ys = crf.tagging(text_fv, theta)
     print "tagging:", prob, features.id2label(ys)
 
     theta = crf.inference(fvs, theta)
 
-    print "theta:", theta
+    #print "theta:", theta
     print "log likelihood:", crf.likelihood(fvs, theta)
-    prob, ys = crf.tagging(fv, theta)
-    print "tagging:", prob, zip(texts[0], labels[0], features.id2label(ys))
+    prob, ys = crf.tagging(text_fv, theta)
+    print "tagging:", prob, zip(test_texts[0], test_labels[0], features.id2label(ys))
 
 if __name__ == "__main__":
     main()
