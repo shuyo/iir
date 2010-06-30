@@ -11,9 +11,14 @@ def logdotexp_vec_mat(loga, logM):
 def logdotexp_mat_vec(logM, logb):
     return numpy.array([maxentropy.logsumexp(x + logb) for x in logM], copy=False)
 
+def flatten(x):
+    a = []
+    for y in x: a.extend(flatten(y) if isinstance(y, list) else [y])
+    return a
+
 class FeatureVector(object):
     def __init__(self, features, xlist, ylist=None):
-        '''statistics of features (sufficient statistics like)'''
+        '''intermediates of features (sufficient statistics like)'''
         flist = features.features_edge
         glist = features.features
         self.K = len(features.labels)
@@ -70,7 +75,8 @@ class Features(object):
     def __init__(self, labels):
         self.features = []
         self.features_edge = []
-        self.labels = ["start","stop"] + dict([(i,1) for y in labels for i in y]).keys()
+        self.labels = ["start","stop"] + flatten(labels)
+
     def start_label_index(self):
         return 0
     def stop_label_index(self):
