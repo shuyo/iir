@@ -44,7 +44,26 @@ def load_file(filename):
         paragraph += line + "\n"
     f.close()
     print filename, len(text), "paras."
-    return (text, label)
+    return ([Paragraph(p) for p in text], label)
+
+def max_length(text, pattern, flags=re.M):
+    list = [len(x) for x in re.findall(pattern, text, flags)]
+    if len(list)==0: return 0
+    return max(list)
+
+class Paragraph(object):
+    def __init__(self, text):
+        self.has_word = dict()
+        self.text = text
+        self.all_upper = (text.upper() == text)
+        self.linehead = {' ': max_length(text, '^ +'), '*': max_length(text, r'^\*+')}
+        self.linetail = {'*': max_length(text, '\*+$')}
+        self.n_lines = len(text.split("\n"))
+    def has(self, word):
+        if word in self.has_word: return self.has_word[word]
+        self.has_word[word] = True if re.search(word, self.text, re.I) else False
+        return self.has_word[word]
+
 
 def pg_features(LABELS):
     '''CRF features for Project Gutenberg Content Extractor'''
@@ -52,43 +71,43 @@ def pg_features(LABELS):
     features = Features(LABELS)
     for label in LABELS:
         # keywords
-        for word in "project/gutenberg/e-?text/ebook/copyright/chapter/scanner/David Reed/encoding/contents/file/zip/web/http/email/newsletter/public domain/donation/archive/ascii/end of (the)? project gutenberg/PREFACE/INTRODUCTION/Language:/Release Date:/Character set/refund/LIMITED RIGHT".split('/'):
-            features.add_feature( lambda x, y, w=word, l=label: 1 if re.search(w, x, re.I) and y == l else 0 )
+        for word in "project/gutenberg/e-?text/ebook/copyright/chapter/scanner/David Reed/encoding/contents/file/zip/web/http/email/newsletter/public domain/donation/archive/ascii/produced/end of (the)? project gutenberg/PREFACE/INTRODUCTION/Language:/Release Date:/Character set/refund/LIMITED RIGHT".split('/'):
+            features.add_feature( lambda x, y, w=word, l=label: 1 if x.has(w) and y == l else 0 )
 
         # type case
-        features.add_feature( lambda x, y, l=label: 1 if x.upper() == x and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'[A-Z]{3}', x) and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.all_upper and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.has(r'[A-Z]{3}') and y == l else 0 )
 
         # numeric
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'[0-9]',x) and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'[0-9]{2}',x) and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'[0-9]{3}',x) and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'[0-9]{4}',x) and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.has(r'[0-9]') and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.has(r'[0-9]{2}') and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.has(r'[0-9]{3}') and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.has(r'[0-9]{4}') and y == l else 0 )
 
         # line head
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'^  ', x, re.M) and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'^    ', x, re.M) and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'^\*', x, re.M) and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'^\*{2}', x, re.M) and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'^\*{3}', x, re.M) and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.linehead[' ']>=2 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.linehead[' ']>=4 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.linehead['*']>=1 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.linehead['*']>=2 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.linehead['*']>=3 and y == l else 0 )
 
         # line tail
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'\*$', x, re.M) and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'\*{2}$', x, re.M) and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'\*{3}$', x, re.M) and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'\n\n$',x) and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.linetail['*']>=1 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.linetail['*']>=2 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.linetail['*']>=3 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.has(r'\n\n$') and y == l else 0 )
 
         # symbols
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'@',x) and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'#',x) and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'\?',x) and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if re.search(r'\[',x) and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.has(r'@') and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.has(r'#') and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.has(r'\?') and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.has(r'\[') and y == l else 0 )
 
         # line number
-        features.add_feature( lambda x, y, l=label: 1 if len(x.split("\n"))==1 and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if len(x.split("\n"))==2 and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if len(x.split("\n"))==3 and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if len(x.split("\n"))>3 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_lines==1 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_lines==2 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_lines==3 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_lines>3 and y == l else 0 )
 
     # labels
     for label1 in features.labels:
@@ -113,7 +132,7 @@ def pg_tagging(fv, text, label, crf, features, theta):
                 pgt_output(cur_label, cur_text)
                 cur_text = []
                 cur_label = x[0]
-            cur_text.append(x[1][0:64].replace("\n", " "))
+            cur_text.append(x[1].text[0:64].replace("\n", " "))
         pgt_output(cur_label, cur_text)
     else:
         compare = zip(label, features.id2label(ys), text)
@@ -121,7 +140,7 @@ def pg_tagging(fv, text, label, crf, features, theta):
         for x in compare:
             if x[0] != x[1]:
                 print "----------", x[0], "=>", x[1]
-                print x[2][0:400]
+                print x[2].text[0:400]
 
 def pgt_output(label, text):
     if len(text)==0: return
@@ -167,6 +186,8 @@ def main():
         f = open(options.model, 'r')
         theta = pickle.loads(f.read())
         f.close()
+        if features.size() != len(theta):
+            raise ValueError, "model's length not equal feature's length."
 
     if options.test_dir:
         test_files = glob.glob(options.test_dir + '/*')

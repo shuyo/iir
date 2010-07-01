@@ -48,24 +48,41 @@ def load_file(filename):
         labels.append(current_label)
 
     print "<<", filename, len(blocks), "blocks, labels=",unique(labels), ">>"
-    return ([(b, block_info(b)) for b in blocks], labels)
+    return ([BlockInfo(b) for b in blocks], labels)
 
-def block_info(block):
-    tags = re.findall(r'<(\w+)', block)
-    map = dict()
-    for t in tags:
-        t = t.lower()
-        if t in map:
-            map[t] += 1
-        else:
-            map[t] = 1
-    plain_text = re.sub(r'\s', '', re.sub(r'(?s)<[^>]+>', '', block))
-    map["len_text"] = len(plain_text)
-    map["n_ten"] = len(re.findall(r'、|，', plain_text))
-    map["n_maru"] = len(re.findall(r'。', plain_text))
-    map["has_date"] = re.search(r'20[01][0-9]\s?[\-\/]\s?[0-9]{1,2}\s?[\-\/]\s?[0-9]{1,2}', plain_text) or re.search(r'20[01][0-9]年[0-9]{1,2}月[0-9]{1,2}日', plain_text)
-    map["affi_link"] = re.search(r'amazon[\w\d\.\/\-\?&]+-22', block)
-    return map
+def eliminate_tags(x):
+    return re.sub(r'\s', '', re.sub(r'(?s)<[^>]+>', '', x))
+
+class BlockInfo(object):
+    def __init__(self, block):
+        tags = re.findall(r'<(\w+)', block)
+        self.map = dict()
+        for t in tags:
+            t = t.lower()
+            if t in self.map:
+                self.map[t] += 1
+            else:
+                self.map[t] = 1
+
+        self.has_word = dict()
+        self.org_text = block
+        self.plain_text = eliminate_tags(block)
+        notlinked_text = eliminate_tags(re.sub(r'(?is)<a\s[^>]+>.+?<\/a>', '', block))
+
+        self.len_text = len(self.plain_text)
+        self.linked_rate = 1 - float(len(notlinked_text)) / self.len_text if self.len_text > 0 else 0
+        self.n_ten = len(re.findall(r'、|，', self.plain_text))
+        self.n_maru = len(re.findall(r'。', self.plain_text))
+        self.has_date = re.search(r'20[01][0-9]\s?[\-\/]\s?[0-9]{1,2}\s?[\-\/]\s?[0-9]{1,2}', self.plain_text) or re.search(r'20[01][0-9]年[0-9]{1,2}月[0-9]{1,2}日', self.plain_text)
+        self.affi_link = re.search(r'amazon[\w\d\.\/\-\?&]+-22', block)
+    def __getitem__(self, key):
+        if key not in self.map: raise IndexError, key
+        return self.map[key]
+    def has(self, word):
+        if word in self.has_word: return self.has_word[word]
+        self.has_word[word] = True if re.search(word, self.plain_text, re.I) else False
+        return self.has_word[word]
+
 
 def unique(x):
     a = []
@@ -82,31 +99,36 @@ def wce_features(LABELS):
     for label in LABELS:
         # keywords
         for word in "Copyright|All Rights Reserved|広告掲載|会社概要|無断転載|プライバシーポリシー|利用規約|お問い合わせ|トラックバック|ニュースリリース|新着|無料|確認メール|コメントする|アソシエイト".split('|'):
-            features.add_feature( lambda x, y, w=word, l=label: 1 if re.search(w, x[0], re.I) and y == l else 0 )
+            features.add_feature( lambda x, y, w=word, l=label: 1 if x.has(w) and y == l else 0 )
+            #features.add_feature( lambda x, y, w=word, l=label: 1 if re.search(w, x.org_text, re.I) and y == l else 0 )
 
         # html tags
-        for tag in "a|p|div|ul|ol|li|dl|dt|dd|table|tr|td|h1|h2|h3|h4|h5|h6|meta|form|input|img".split('|'):
-            features.add_feature( lambda x, y, t=tag, l=label: 1 if t in x[1] and y == l else 0 )
+        for tag in "a|p|div|ul|ol|li|dl|dt|dd|table|tr|td|h1|h2|h3|h4|h5|h6|meta|form|input|select|option|object|img".split('|'):
+            features.add_feature( lambda x, y, t=tag, l=label: 1 if t in x and y == l else 0 )
 
         # date & affiliate link
-        features.add_feature( lambda x, y, l=label: 1 if x[1]["has_date"] and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if x[1]["affi_link"] and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.has_date and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.affi_link and y == l else 0 )
 
         # punctuation
-        features.add_feature( lambda x, y, l=label: 1 if x[1]["n_ten"]>0 and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if x[1]["n_ten"]>1 and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if x[1]["n_ten"]>2 and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if x[1]["n_ten"]>5 and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if x[1]["n_maru"]>0 and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if x[1]["n_maru"]>1 and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if x[1]["n_maru"]>2 and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if x[1]["n_maru"]>5 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_ten>0 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_ten>1 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_ten>2 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_ten>5 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_maru>0 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_maru>1 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_maru>2 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_maru>5 and y == l else 0 )
 
         # text length
-        features.add_feature( lambda x, y, l=label: 1 if x[1]["len_text"]==0 and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if x[1]["len_text"]>10 and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if x[1]["len_text"]>20 and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if x[1]["len_text"]>50 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.len_text==0 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.len_text>10 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.len_text>20 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.len_text>50 and y == l else 0 )
+
+        # linked rate
+        features.add_feature( lambda x, y, l=label: 1 if x.linked_rate>0.8 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.linked_rate<0.2 and y == l else 0 )
 
     # label bigram
     for label1 in features.labels:
@@ -130,7 +152,7 @@ def wce_output_tagging(text, label, prob, tagged_label):
                 wce_output(cur_label, cur_text)
                 cur_text = []
                 cur_label = x[0]
-            cur_text.append(x[1][0][0:64].replace("\n", " "))
+            cur_text.append(x[1].org_text[0:64].replace("\n", " "))
         wce_output(cur_label, cur_text)
     else:
         compare = zip(label, tagged_label, text)
@@ -138,16 +160,16 @@ def wce_output_tagging(text, label, prob, tagged_label):
         for x in compare:
             if x[0] != x[1]:
                 print "----------", x[0], "=>", x[1]
-                print x[2][0][0:400].strip()
+                print x[2].org_text[0:400].strip()
 
 def wce_output(label, text):
     if len(text)==0: return
     if len(text)<=7:
-        for t in text: print label, t
+        for t in text: print "[%s] %s" % (label, t)
     else:
-        for t in text[:3]: print label, t
+        for t in text[:3]: print "[%s] %s" % (label, t)
         print ": (", len(text)-6, "paragraphs)"
-        for t in text[-3:]: print label, t
+        for t in text[-3:]: print "[%s] %s" % (label, t)
 
 
 def main():
@@ -188,6 +210,8 @@ def main():
             f = open(options.model, 'w')
             f.write(pickle.dumps((LABELS, theta)))
             f.close()
+    elif features.size() != len(theta):
+        raise ValueError, "model's length not equal feature's length."
 
     if options.test_dir:
         test_files = glob.glob(options.test_dir + '/*')
@@ -206,7 +230,7 @@ def main():
 
         if options.body:
             for x, l in zip(text, tagged_label):
-                if l == "body": print re.sub(r'\s+', ' ', re.sub(r'(?s)<[^>]+>', '', x[0])).strip()
+                if l == "body": print re.sub(r'\s+', ' ', re.sub(r'(?s)<[^>]+>', '', x.org_text)).strip()
         else:
             wce_output_tagging(text, label, prob, tagged_label)
         i += 1
