@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Extract Web Content 
+# Extract Web Content with HMM
 # (c)2010 Nakatani Shuyo, Cybozu Labs Inc.
 
 import sys, os, re

@@ -2,43 +2,34 @@
 # -*- coding: utf-8 -*-
 # Conditional Random Field
 
-import sys, os, re, pickle
-from optparse import OptionParser
-
 import numpy
 from scipy import optimize, maxentropy
-numpy.set_printoptions(precision=5)
 
+def logdotexp_vec_mat(loga, logM):
+    return numpy.array([maxentropy.logsumexp(loga + x) for x in logM.T], copy=False)
 
-def load_text(filename, limit=1e9):
-    labels = []
-    text = []
-    current_label = "H"
-    f = open(filename, 'r')
-    for line in f:
-        m = re.match(r'##([A-Z]{1,3})$', line)
-        if m:
-            current_label = m.group(1)
-            continue
-        text.append(line)
-        labels.append(current_label)
-        if len(text) >= limit: break
-    f.close()
-    return (text, labels)
+def logdotexp_mat_vec(logM, logb):
+    return numpy.array([maxentropy.logsumexp(x + logb) for x in logM], copy=False)
+
+def flatten(x):
+    a = []
+    for y in x: a.extend(flatten(y) if isinstance(y, list) else [y])
+    return a
 
 class FeatureVector(object):
-    def __init__(self, features, ylist, xlist):
-        '''statistics of features (sufficient statistics like)'''
+    def __init__(self, features, xlist, ylist=None):
+        '''intermediates of features (sufficient statistics like)'''
         flist = features.features_edge
         glist = features.features
         self.K = len(features.labels)
 
-        # expectation of features under empirical distribution
-        self.Fss = numpy.zeros(len(flist) + len(glist), dtype=int)
-        for y1, y2 in zip(["start"] + ylist, ylist + ["end"]):
-            self.Fss[:len(flist)] += [f(y1, y2) for f in flist]
-        for y1, x1 in zip(ylist, xlist):
-            self.Fss[len(flist):] += [g(x1, y1) for g in glist]
+        # expectation of features under empirical distribution (if ylist is specified)
+        if ylist:
+            self.Fss = numpy.zeros(features.size(), dtype=int)
+            for y1, y2 in zip(["start"] + ylist, ylist + ["end"]):
+                self.Fss[:len(flist)] += [f(y1, y2) for f in flist]
+            for y1, x1 in zip(ylist, xlist):
+                self.Fss[len(flist):] += [g(x1, y1) for g in glist]
 
         # index list of ON values of edge features
         self.Fon = [] # (n, #f, indexes)
@@ -51,9 +42,7 @@ class FeatureVector(object):
             for j, g in enumerate(glist):
                 mt[j] = [g(x, y) for y in features.labels]  # sparse
             self.Gmat.append(mt)
-
-            # when fmlist depends on x_i (if necessary)
-            #self._calc_fmlist(flist, x)
+            #self._calc_fmlist(flist, x) # when fmlist depends on x_i (if necessary)
 
         # when fmlist doesn't depend on x_i
         self._calc_fmlist(features)
@@ -82,30 +71,22 @@ class FeatureVector(object):
             fv[j] = numpy.dot(theta_f, fm)
         return [fv + numpy.dot(theta_g, gm) for gm in self.Gmat] + [fv]
 
-    def logMlist2(self, theta_f, theta_g):
-        '''for dependent fmlists on x_i'''
-        Mlist = []
-        for gm, fmlist in zip(self.Gmat, self.Fmat):
-            fv = numpy.zeros((self.K, self.K))
-            for j, fm in enumerate(fmlist):
-                fv[j] = numpy.dot(theta_f, fm)
-            Mlist.append(fv + numpy.dot(theta_g, gm))
-        return Mlist
-
-
 class Features(object):
     def __init__(self, labels):
         self.features = []
         self.features_edge = []
-        self.labels = ["start","stop"] + dict(map(lambda i: (i,1),labels)).keys()
+        self.labels = ["start","stop"] + flatten(labels)
+
     def start_label_index(self):
         return 0
     def stop_label_index(self):
         return 1
     def size(self):
-        return len(self.features)
+        return len(self.features) + len(self.features_edge)
     def size_edge(self):
         return len(self.features_edge)
+    def id2label(self, list):
+        return [self.labels[id] for id in list]
 
     def add_feature(self, f):
         self.features.append(f)
@@ -126,10 +107,9 @@ class CRF(object):
             v2 = v * 2
             self.regularity = lambda w:numpy.sum(w ** 2) / v2
             self.regularity_deriv = lambda w:numpy.sum(w) / v
-        #self.pre_theta = numpy.zeros(self.features.size()+ self.features.size_edge())
 
     def random_param(self):
-        return numpy.random.randn(self.features.size()+ self.features.size_edge())
+        return numpy.random.randn(self.features.size())
 
     def logalphas(self, Mlist):
         logalpha = Mlist[0][self.features.start_label_index()] # alpha(1)
@@ -147,95 +127,247 @@ class CRF(object):
             logbetas.append(logbeta)
         return logbetas[::-1]
 
-    def likelihood(self, fv, theta):
+    def likelihood(self, fvs, theta):
         '''conditional log likelihood log p(Y|X)'''
-        #print "T" if (theta == self.pre_theta).all() else "F"
-        #self.pre_theta = theta
-
         n_fe = self.features.size_edge() # number of features on edge
-        logMlist = fv.logMlist(theta[:n_fe], theta[n_fe:])
+        t1, t2 = theta[:n_fe], theta[n_fe:]
+        stop_index = self.features.stop_label_index()
 
-        log_Z = self.logalphas(logMlist)[-1][self.features.stop_label_index()]
-        return fv.cost(theta)  - self.regularity(theta) - log_Z
+        likelihood = 0
+        for fv in fvs:
+            logMlist = fv.logMlist(t1, t2)
+            logZ = self.logalphas(logMlist)[-1][stop_index]
+            likelihood += fv.cost(theta) - logZ
+        return likelihood - self.regularity(theta)
 
-    def gradient_likelihood(self, fv, theta):
+    def gradient_likelihood(self, fvs, theta):
         n_fe = self.features.size_edge() # number of features on edge
-        logMlist = fv.logMlist(theta[:n_fe], theta[n_fe:])
-        logalphas = self.logalphas(logMlist)
-        logbetas = self.logbetas(logMlist)
-        log_Z = logalphas[-1][self.features.stop_label_index()]
+        t1, t2 = theta[:n_fe], theta[n_fe:]
+        stop_index = self.features.stop_label_index()
+        start_index = self.features.start_label_index()
 
-        grad = numpy.array(fv.Fss, dtype=float) # empirical expectation
+        grad = numpy.zeros(self.features.size())
+        for fv in fvs:
+            logMlist = fv.logMlist(t1, t2)
+            logalphas = self.logalphas(logMlist)
+            logbetas = self.logbetas(logMlist)
+            logZ = logalphas[-1][stop_index]
 
-        expect_edge = numpy.zeros_like(logMlist[0])
-        for i in range(len(logMlist)):
-            if i==0:
-                expect_edge[self.features.start_label_index()] += numpy.exp(logalphas[i] + logbetas[i+1] - log_Z)
-            elif i<len(logbetas)-1:
-                m = logMlist[i]
-                a = logalphas[i-1][:,numpy.newaxis]
-                b = logbetas[i+1]
-                expect_edge += numpy.exp(m + b + a - log_Z)
-            else:
-                expect_edge[:,self.features.stop_label_index()] += numpy.exp(logalphas[i-1] + logbetas[i] - log_Z)
-        for k, indexes in enumerate(fv.Fon[0]):
-            #print grad[k], expect_edge, indexes
-            grad[k] -= numpy.sum(expect_edge.take(indexes))
+            grad += numpy.array(fv.Fss, dtype=float) # empirical expectation
 
-        for i, gm in enumerate(fv.Gmat):
-            p_yi = numpy.exp(logalphas[i] + logbetas[i+1] - log_Z)
-            #print i, p_yi, sum(p_yi), gm
-            grad[n_fe:] -= numpy.sum(gm * numpy.exp(logalphas[i] + logbetas[i+1] - log_Z), axis=1)
+            expect = numpy.zeros_like(logMlist[0])
+            for i in range(len(logMlist)):
+                if i == 0:
+                    expect[start_index] += numpy.exp(logalphas[i] + logbetas[i+1] - logZ)
+                elif i < len(logbetas) - 1:
+                    a = logalphas[i-1][:, numpy.newaxis]
+                    expect += numpy.exp(logMlist[i] + a + logbetas[i+1] - logZ)
+                else:
+                    expect[:, stop_index] += numpy.exp(logalphas[i-1] + logbetas[i] - logZ)
+            for k, indexes in enumerate(fv.Fon[0]):
+                grad[k] -= numpy.sum(expect.take(indexes))
+
+            for i, gm in enumerate(fv.Gmat):
+                p_yi = numpy.exp(logalphas[i] + logbetas[i+1] - logZ)
+                grad[n_fe:] -= numpy.sum(gm * numpy.exp(logalphas[i] + logbetas[i+1] - logZ), axis=1)
 
         return grad - self.regularity_deriv(theta)
 
+    def inference(self, fvs, theta):
+        likelihood = lambda x:-self.likelihood(fvs, x)
+        likelihood_deriv = lambda x:-self.gradient_likelihood(fvs, x)
+        return optimize.fmin_bfgs(likelihood, theta, fprime=likelihood_deriv)
 
-def logdotexp_vec_mat(loga, logM):
-    return numpy.array([maxentropy.logsumexp(loga + x) for x in logM.T], copy=False)
-def logdotexp_mat_vec(logM, logb):
-    return numpy.array([maxentropy.logsumexp(x + logb) for x in logM], copy=False)
+    def tagging(self, fv, theta):
+        n_fe = self.features.size_edge() # number of features on edge
+        logMlist = fv.logMlist(theta[:n_fe], theta[n_fe:])
+
+        logalphas = self.logalphas(logMlist)
+        logZ = logalphas[-1][self.features.stop_label_index()]
+
+        delta = logMlist[0][self.features.start_label_index()]
+        argmax_y = []
+        for logM in logMlist[1:]:
+            h = logM + delta[:, numpy.newaxis]
+            argmax_y.append(h.argmax(0))
+            delta = h.max(0)
+        Y = [delta.argmax()]
+        for a in reversed(argmax_y):
+            Y.append(a[Y[-1]])
+
+        return Y[0] - logZ, Y[::-1]
+
+    def tagging_verify(self, fv, theta):
+        '''verification of tagging'''
+        n_fe = self.features.size_edge() # number of features on edge
+        logMlist = fv.logMlist(theta[:n_fe], theta[n_fe:])
+        N = len(logMlist) - 1
+        K = logMlist[0][0].size
+
+        ylist = [0] * N
+        max_p = -1e9
+        argmax_p = None
+        while True:
+            logp = logMlist[0][self.features.start_label_index(), ylist[0]]
+            for i in range(len(ylist)-1):
+                logp += logMlist[i+1][ylist[i], ylist[i+1]]
+            logp += logMlist[N][ylist[N-1], self.features.stop_label_index()]
+            print ylist, logp
+            if max_p < logp:
+                max_p = logp
+                argmax_p = ylist[:]
+
+            for k in range(N-1,-1,-1):
+                if ylist[k] < K-1:
+                    ylist[k] += 1
+                    break
+                ylist[k] = 0
+            else:
+                break
+        return max_p, argmax_p
+
+
 
 def main():
-    parser = OptionParser()
-    parser.add_option("-f", dest="filename", help="text filename")
-    parser.add_option("-l", dest="regularity", type="int", help="regularity. 0=none, 1=L1, 2=L2 [2]", default=2)
-    (options, args) = parser.parse_args()
-    if not options.filename: parser.error("need corpus filename(-f)")
+    def load_data(data):
+        texts = []
+        labels = []
+        text = []
+        data = "\n" + data + "\n"
+        for line in data.split("\n"):
+            line = line.strip()
+            if len(line) == 0:
+                if len(text)>0:
+                    texts.append(text)
+                    labels.append(label)
+                text = []
+                label = []
+            else:
+                token, info, chunk = line.split()
+                text.append((token, info))
+                label.append(chunk)
+        return (texts, labels)
 
-    text, labels = load_text(options.filename)
+    texts, labels = load_data("""
+    This DT B-NP
+    temblor-prone JJ I-NP
+    city NN I-NP
+    dispatched VBD B-VP
+    inspectors NNS B-NP
+    , , O
+    firefighters NNS B-NP
+    and CC O
+    other JJ B-NP
+    earthquake-trained JJ I-NP
+    personnel NNS I-NP
+    to TO B-VP
+    aid VB I-VP
+    San NNP B-NP
+    Francisco NNP I-NP
+    . . O
+
+    He PRP B-NP
+    reckons VBZ B-VP
+    the DT B-NP
+    current JJ I-NP
+    account NN I-NP
+    deficit NN I-NP
+    will MD B-VP
+    narrow VB I-VP
+    to TO B-PP
+    only RB B-NP
+    # # I-NP
+    1.8 CD I-NP
+    billion CD I-NP
+    in IN B-PP
+    September NNP B-NP
+    . . O
+
+    Meanwhile RB B-ADVP
+    , , O
+    overall JJ B-NP
+    evidence NN I-NP
+    on IN B-PP
+    the DT B-NP
+    economy NN I-NP
+    remains VBZ B-VP
+    fairly RB B-ADJP
+    clouded VBN I-ADJP
+    . . O
+
+    But CC O
+    consumer NN B-NP
+    expenditure NN I-NP
+    data NNS I-NP
+    released VBD B-VP
+    Friday NNP B-NP
+    do VBP B-VP
+    n't RB I-VP
+    suggest VB I-VP
+    that IN B-SBAR
+    the DT B-NP
+    U.K. NNP I-NP
+    economy NN I-NP
+    is VBZ B-VP
+    slowing VBG I-VP
+    that DT B-ADVP
+    quickly RB I-ADVP
+    . . O
+    """)
+
+    test_texts, test_labels = load_data("""
+    Rockwell NNP B-NP
+    said VBD B-VP
+    the DT B-NP
+    agreement NN I-NP
+    calls VBZ B-VP
+    for IN B-SBAR
+    it PRP B-NP
+    to TO B-VP
+    supply VB I-VP
+    200 CD B-NP
+    additional JJ I-NP
+    so-called JJ I-NP
+    shipsets NNS I-NP
+    for IN B-PP
+    the DT B-NP
+    planes NNS I-NP
+    . . O
+    """)
 
     features = Features(labels)
+    tokens = dict([(i[0],1) for x in texts for i in x]).keys()
+    infos = dict([(i[1],1) for x in texts for i in x]).keys()
+
     for label in features.labels:
-        for keyword in "project gutenberg etext copyright chapter".split():
-            features.add_feature( lambda x, y: 1 if re.search(keyword, x, re.I) and y == label else 0 )
-        features.add_feature( lambda x, y: 1 if y == label else 0 )
-        features.add_feature_edge( lambda y_, y: 1 if y_ == label else 0 )
+        for token in tokens:
+            features.add_feature( lambda x, y, l=label, t=token: 1 if y==l and x[0]==t else 0 )
+        for info in infos:
+            features.add_feature( lambda x, y, l=label, i=info: 1 if y==l and x[1]==i else 0 )
+    features.add_feature_edge( lambda y_, y: 0 )
 
-    features.add_feature( lambda x, y: 1 if re.search(r"[A-Z]{3}", x) else 0 )
-    features.add_feature( lambda x, y: 1 if re.search(r"[0-9]", x) else 0 )
-    features.add_feature( lambda x, y: 1 if x.find("@")>=0 else 0 )
-    features.add_feature( lambda x, y: 1 if x.find("#")>=0 else 0 )
-    features.add_feature( lambda x, y: 1 if x.startswith("*") else 0 )
-    features.add_feature( lambda x, y: 1 if x.startswith("  ") else 0 )
-    features.add_feature( lambda x, y: 1 if x.startswith("    ") else 0 )
-    features.add_feature( lambda x, y: 1 if x.startswith("        ") else 0 )
-    features.add_feature( lambda x, y: 1 if len(x.strip()) == 0 else 0 )
+    fvs = [FeatureVector(features, x, y) for x, y in zip(texts, labels)]
+    fv = fvs[0]
+    text_fv = FeatureVector(features, test_texts[0]) # text sequence without labels
 
-    #features.add_feature_edge( lambda y_, y: 1 if len(x_.strip()) == 0 else 0 )
 
-    fv = FeatureVector(features, labels, text)
-
-    crf = CRF(features, options.regularity)
-    likelihood = lambda x:-crf.likelihood(fv, x)
-    likelihood_deriv = lambda x:-crf.gradient_likelihood(fv, x)
-
+    crf = CRF(features, 2)
     theta = crf.random_param()
-    print "theta:", theta
-    print "-log likelihood:", likelihood(theta)
 
-    theta = optimize.fmin_bfgs(likelihood, theta, fprime=likelihood_deriv)
-    print likelihood(theta), theta
+    print "features:", features.size()
+    print "labels:", len(features.labels)
 
+    #print "theta:", theta
+    print "log likelihood:", crf.likelihood(fvs, theta)
+    prob, ys = crf.tagging(text_fv, theta)
+    print "tagging:", prob, features.id2label(ys)
+
+    theta = crf.inference(fvs, theta)
+
+    #print "theta:", theta
+    print "log likelihood:", crf.likelihood(fvs, theta)
+    prob, ys = crf.tagging(text_fv, theta)
+    print "tagging:", prob, zip(test_texts[0], test_labels[0], features.id2label(ys))
 
 if __name__ == "__main__":
     main()
