@@ -7,7 +7,7 @@ target_id = nil
 parser.on('--id=VAL', Integer, 'target text id') {|v| target_id = v }
 parser.parse!(ARGV)
 
-detector = LanguageDetector::Detector.new(LD::model_filename, 100.0, 100.0)
+detector = LanguageDetector::Detector.new(LD::model_filename, 1.0)
 
 # Database
 db = LD::db_connect

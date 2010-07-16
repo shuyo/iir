@@ -51,12 +51,11 @@ module LanguageDetector
   end
 
   class Detector
-    def initialize(filename, alpha=1.0, beta=1.0)
+    def initialize(filename, alpha=1)
       @n_k, @p_ik, @n = open(filename){|f| Marshal.load(f) }
       @n ||= 3
       @p_ik.default = 0
       @alpha = alpha
-      @beta = beta
       @debug = false
     end
     def debug_on; @debug = true; end
@@ -72,7 +71,9 @@ module LanguageDetector
       puts "#{x}: #{freq.inspect}" if @debug
       sum = 0
       LD::LANGLIST.each do |lang|
-        @prob[lang] *= (freq[lang] + @alpha) / (@n_k[lang] + @beta)
+        #@prob[lang] *= freq[lang].to_f / @n_k[lang] + @alpha
+        #@prob[lang] *= (freq[lang].to_f + @alpha) / (@n_k[lang] + @alpha)
+        @prob[lang] *= (freq[lang].to_f + @alpha) / (@n_k[lang] + LD::LANGLIST.length * @alpha)
         sum += @prob[lang]
       end
       @maxprob = 0
@@ -83,6 +84,6 @@ module LanguageDetector
       p problist(0.1) if @debug
     end
     def maxprob; @maxprob; end
-    def problist(t=0.1); @prob.to_a.select{|x| x[1]>t}.sort_by{|x| -x[1]}; end
+    def problist(t=0.01); @prob.to_a.select{|x| x[1]>t}.sort_by{|x| -x[1]}; end
   end
 end
