@@ -1,7 +1,8 @@
 #!/usr/bin/ruby -Ku
 
 require 'common.rb'
-parser= LD::optparser()
+require 'detect.rb'
+parser= LD::optparser
 opt = {:N=>3, :training_size=>150, :csv=>false}
 parser.on('-n VAL', Integer, 'N-gram') {|v| opt[:N] = v }
 parser.on('--size=VAL', Integer, 'max size of training data') {|v| opt[:training_size] = v }
@@ -15,19 +16,18 @@ ps_select = db.prepare("select title,lang,body from news order by rand()")
 ps_select.execute
 n_k = Hash.new(0)
 p_ik = Hash.new{|h,k| h[k]=Hash.new(0)}
-ngram = LD::Ngram.new(opt[:N])
+ngramer = LanguageDetector::Ngramer.new(opt[:N])
 while rs = ps_select.fetch
   title, lang, body = rs
   next if n_k[lang] >= opt[:training_size]
   n_k[lang] += 1
   text = LD::decode_entity(title + "\n" + body)
-  grams = Hash.new
-  #pre_x = " "
-  ngram.clear
 
+  grams = Hash.new
+  ngramer.clear
   text.scan(/./) do |x|
-    ngram.append LD::normalize(x)
-    ngram.each do |z|
+    ngramer.append x
+    ngramer.each do |z|
       grams[z] = 1
     end
   end
@@ -54,5 +54,5 @@ keys.each do |chunk|
 end
 
 p_ik.default = 0
-open(LD::opt[:model], 'w'){|f| Marshal.dump([n_k, p_ik, opt[:N]], f) }
+open(LD::model_filename, 'w'){|f| Marshal.dump([n_k, p_ik, opt[:N]], f) }
 

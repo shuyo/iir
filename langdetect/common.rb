@@ -23,12 +23,11 @@ module LD
     "&raquo;"=>""
   }
 
-  def self.optparser(additional_default = {})
+  def self.optparser
     @opt = {
       :host=>'localhost', :user=>'root', :passwd=>'', :dbname=>'googlenews', :port=>3306,
       :model=>'model'
     }
-    @opt.update(additional_default)
 
     parser = OptionParser.new
     parser.on('--host=VAL', String, 'database host') {|v| @opt[:host] = v }
@@ -39,8 +38,8 @@ module LD
     parser.on('-f VAL', String, 'model filename') {|v| @opt[:model] = v }
     parser
   end
-  def self.opt
-    @opt
+  def self.model_filename
+    @opt[:model]
   end
 
   def self.db_connect
@@ -52,55 +51,6 @@ module LD
 
   def self.decode_entity(st)
     st.gsub(/&[^ &]+?;/){|m| ENTITIES[m] || m}
-  end
-
-  def self.normalize(x)
-    if x[0] <= 65
-      " "
-    elsif x =~ /^[\xd0-\xd1][\x80-\xbf]/      # Cyrillic
-      "\xd0\x96"
-    elsif x =~ /^[\xd8-\xd9][\x80-\xbf]/      # Arabic
-      "\xd8\xa6"
-    elsif x =~ /^\xe0[\xa4-\xa5][\x80-\xbf]/  # Devanagari
-      "\xe0\xa4\x85"
-    elsif x =~ /^\xe0[\xb8-\xb9][\x80-\xbf]/  # Thai
-      "\xe0\xb9\x91"
-    elsif x =~ /^\xe1[\xba-\xbb][\x80-\xbf]/  # Latin Extended Additional(Vietnam)
-      "\xe1\xba\xa1"
-    elsif x =~ /^\xe3[\x81-\x83][\x80-\xbf]/  # Hiragana / Katakana
-      "\xe3\x81\x82"
-    elsif x =~ /^\xea[\xb0-\xbf][\x80-\xbf]/  # Hangul Syllables 1
-      "\xea\xb0\x80"
-    elsif x =~ /^[\xeb-\xed][\x80-\xbf]{2}/   # Hangul Syllables 2
-      "\xed\x9e\x98"
-    else
-      x
-    end
-  end
-
-  class Ngram
-    def initialize(n)
-      @n = n
-      clear
-    end
-    def clear
-      @grams = [" "]
-    end
-    def append(x)
-      clear if @grams[-1] == " "
-      @grams << x
-      @grams = @grams[-@n..-1] if @grams.length > @n
-    end
-    def get(n)
-      return nil if @grams.length < n
-      @grams[-n..-1].join
-    end
-    def each
-      (1..@n).each do |n|
-        x = get(n)
-        yield x if x
-      end
-    end
   end
 end
 
