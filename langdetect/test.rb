@@ -4,10 +4,12 @@ require 'common.rb'
 require 'detect.rb'
 parser= LD::optparser
 target_id = nil
+alpha = 1.0
 parser.on('--id=VAL', Integer, 'target text id') {|v| target_id = v }
+parser.on('-a VAL', Float, 'alpha (additive smoothing)') {|v| alpha = v }
 parser.parse!(ARGV)
 
-detector = LanguageDetector::Detector.new(LD::model_filename, 1.0)
+detector = LanguageDetector::Detector.new(LD::model_filename, alpha)
 
 # Database
 db = LD::db_connect
