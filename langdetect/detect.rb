@@ -1,6 +1,21 @@
 #!/usr/bin/ruby -Ku
 
 module LanguageDetector
+  LANGLIST = [
+    # 日本語,中国語(繁体字),中国語(簡体字),韓国語,英語,フランス語,
+    # イタリア語,スペイン語,ロシア語,アラビア語,ベトナム語,タイ語,
+    "ja", "zh-CN", "zh-TW", "ko", "en", "fr", "it", "es", "ru", "ar", "vi", "th",
+    # ドイツ語,ヒンディー語,ポルトガル語,インドネシア語,
+    "de", "hi", "pt-PT", "id", 
+    "nl", # オランダ語
+    "sv", # スウェーデン語
+
+    # "da", # デンマーク語 (以下、Google News なし)
+    # "fi", # フィンランド語
+    # "bn" # ベンガル語
+    # "fa" # ペルシャ語
+  ]
+
   def self.normalize(x)
     if x[0] <= 65
       " "
@@ -62,7 +77,7 @@ module LanguageDetector
     def ngramer; Ngramer.new(@n); end
     def init
       @prob = Hash.new
-      LD::LANGLIST.each {|lang| @prob[lang] = 1.0 }
+      LANGLIST.each {|lang| @prob[lang] = 1.0 }
       @maxprob = 0
     end
     def append(x)
@@ -70,14 +85,14 @@ module LanguageDetector
       freq = @p_ik[x]
       puts "#{x}: #{freq.inspect}" if @debug
       sum = 0
-      LD::LANGLIST.each do |lang|
+      LANGLIST.each do |lang|
         #@prob[lang] *= freq[lang].to_f / @n_k[lang] + @alpha
         #@prob[lang] *= (freq[lang].to_f + @alpha) / (@n_k[lang] + @alpha)
-        @prob[lang] *= (freq[lang].to_f + @alpha) / (@n_k[lang] + LD::LANGLIST.length * @alpha)
+        @prob[lang] *= (freq[lang].to_f + @alpha) / (@n_k[lang] + LANGLIST.length * @alpha)
         sum += @prob[lang]
       end
       @maxprob = 0
-      LD::LANGLIST.each do |lang|
+      LANGLIST.each do |lang|
         @prob[lang] /= sum
         @maxprob = @prob[lang] if @maxprob < @prob[lang]
       end
