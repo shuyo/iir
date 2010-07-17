@@ -5,10 +5,8 @@
 # (c)2010 Nakatani Shuyo / Cybozu Labs Inc.
 # refer to Ramage+, Labeled LDA: A supervised topic model for credit attribution in multi-labeled corpora(EMNLP2009)
 
-import sys, re #, math
 from optparse import OptionParser
-#from scipy.special import gammaln
-#import scipy.stats
+import re, numpy
 
 def load_corpus(filename):
     corpus = []
@@ -42,9 +40,9 @@ class LLDA:
         V = len(self.vocas)
 
         self.z_m_n = []
-        self.n_m_z = numpy.zeros((M, K), dtype=int)
-        self.n_z_t = numpy.zeros((K, V), dtype=int)
-        self.n_z = numpy.zeros(K, dtype=int)
+        self.n_m_z = numpy.zeros((M, self.K), dtype=int)
+        self.n_z_t = numpy.zeros((self.K, V), dtype=int)
+        self.n_z = numpy.zeros(self.K, dtype=int)
 
         for m, doc in enumerate(self.docs):
             N_m = len(doc)
@@ -56,6 +54,7 @@ class LLDA:
                 self.n_z[z] += 1
 
     def inference(self):
+        V = len(self.vocas)
         for m, doc in enumerate(self.docs):
             for n in range(len(doc)):
                 t = doc[n]
@@ -65,7 +64,7 @@ class LLDA:
                 self.n_z[z] -= 1
 
                 denom_a = self.n_m_z[m].sum() + self.K * self.alpha
-                denom_b = self.n_z_t.sum(axis=1) + self.V * self.beta
+                denom_b = self.n_z_t.sum(axis=1) + V * self.beta
                 p_z = (self.n_z_t[:, t] + self.beta) / denom_b * (self.n_m_z[m] + self.alpha) / denom_a
                 new_z = numpy.random.multinomial(1, p_z / p_z.sum()).argmax()
 
