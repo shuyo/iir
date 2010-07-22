@@ -50,7 +50,7 @@ module LanguageDetector
     end
     def append(x)
       clear if @grams[-1] == " "
-      @grams << x
+      @grams << LanguageDetector::normalize(x)
       @grams = @grams[-@n..-1] if @grams.length > @n
     end
     def get(n)
@@ -60,7 +60,7 @@ module LanguageDetector
     def each
       (1..@n).each do |n|
         x = get(n)
-        yield x if x
+        yield x if x && x != " "
       end
     end
   end
@@ -70,15 +70,16 @@ module LanguageDetector
       @n_k, @p_ik, @n = open(filename){|f| Marshal.load(f) }
       @n ||= 3
       @p_ik.default = 0
-      @alpha = alpha
+      @alpha = alpha.to_f
       @debug = false
     end
     def debug_on; @debug = true; end
     def ngramer; Ngramer.new(@n); end
-    def init
+    def init(alpha=nil)
       @prob = Hash.new
       LANGLIST.each {|lang| @prob[lang] = 1.0 }
       @maxprob = 0
+      @alpha = alpha.to_f if alpha
     end
     def append(x)
       return unless @p_ik.key?(x)
@@ -87,8 +88,8 @@ module LanguageDetector
       sum = 0
       LANGLIST.each do |lang|
         #@prob[lang] *= freq[lang].to_f / @n_k[lang] + @alpha
-        #@prob[lang] *= (freq[lang].to_f + @alpha) / (@n_k[lang] + @alpha)
-        @prob[lang] *= (freq[lang].to_f + @alpha) / (@n_k[lang] + LANGLIST.length * @alpha)
+        #@prob[lang] *= (freq[lang] + @alpha) / (@n_k[lang] + @alpha)
+        @prob[lang] *= (freq[lang] + @alpha * freq.length) / (@n_k[lang] + LANGLIST.length * (@alpha * freq.length))
         sum += @prob[lang]
       end
       @maxprob = 0

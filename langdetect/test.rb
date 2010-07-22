@@ -35,7 +35,7 @@ while rs = ps_select.fetch
     ngramer.each do |z|
       detector.append z
     end
-    break if detector.maxprob > 0.99
+    break if detector.maxprob > 0.99999
   end
 
   problist = detector.problist
@@ -45,9 +45,13 @@ while rs = ps_select.fetch
   detected[lang][problist[0][0]] += 1
 end
 
+sum = correct_sum = 0
 count.keys.sort.each do |lang|
   rate = (10000.0 * correct[lang] / count[lang]).to_i / 100.0
   list = detected[lang].to_a.sort_by{|x| -x[1]}.map{|x| x.join(':')}.join(',')
   puts "#{lang} #{correct[lang]} / #{count[lang]} (#{rate}) [#{list}]"
+  sum += count[lang]
+  correct_sum += correct[lang]
 end
+puts "total: #{correct_sum} / #{sum} (#{(10000.0 * correct_sum / sum).to_i / 100.0})"
 
