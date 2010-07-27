@@ -13,26 +13,12 @@ parser.on('-a VAL', Float, 'alpha (additive smoothing)') {|v| alpha = v }
 parser.on('-d', 'debug mode') { debug_flag = true }
 parser.parse!(ARGV)
 
-detector = LanguageDetector::Detector.new(model, alpha)
+detector = LanguageDetector::Detector.new(model)
 detector.debug_on if debug_flag
 
-ngramer = detector.ngramer
 ARGV.each do |filename|
   text = open(filename){|f| NKF.nkf('-w', f.read) }
   text.gsub!(/https?:\/\/[0-9a-zA-Z\.\/\?=\&\-]+/, '')
-
-  rate = text.length / 100.0
-  rate = 1 if rate > 1
-  detector.init alpha * rate
-  ngramer.clear
-  text.scan(/./) do |x|
-    ngramer.append x
-    ngramer.each do |z|
-      detector.append z
-    end
-    break if detector.maxprob > 0.99999
-  end
-
-  problist = detector.problist
+  problist = detector.detect(text, alpha)
   puts "#{filename},#{problist.inspect},#{text[0..100].gsub(/\s+/, ' ').strip}"
 end

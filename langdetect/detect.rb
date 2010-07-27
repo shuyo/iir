@@ -1,4 +1,6 @@
 #!/usr/bin/ruby -Ku
+# LanguageDetector : Language detection
+# (c)2010 Nakatani Shuyo / Cybozu Labs, Inc.
 
 module LanguageDetector
   LANGLIST = [
@@ -7,7 +9,7 @@ module LanguageDetector
     # イタリア語,スペイン語,ロシア語,アラビア語,ベトナム語,タイ語,
     "it", "es", "ru", "ar", "vi", "th",
     # ドイツ語,ヒンディー語,ポルトガル語,インドネシア語,
-    "de", "hi", "pt-PT", "id",
+    "de", "hi", "pt-PT", "id", 
     "nl", # オランダ語
     "sv", # スウェーデン語
     "pl", # ポーランド語
@@ -123,6 +125,20 @@ CLASS
         @maxprob = @prob[lang] if @maxprob < @prob[lang]
       end
       p problist(0.1) if @debug
+    end
+    def detect(text, alpha=nil)
+      alpha *= text.length / 100.0 if alpha && text.length < 100
+      init alpha
+
+      ngram = ngramer
+      text.scan(/./) do |x|
+        ngram.append x
+        ngram.each do |z|
+          append z
+        end
+        break if @maxprob > 0.99999
+      end
+      problist
     end
     def maxprob; @maxprob; end
     def problist(t=0.01); @prob.to_a.select{|x| x[1]>t}.sort_by{|x| -x[1]}; end
