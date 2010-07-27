@@ -26,6 +26,7 @@ detected = Hash.new{|h,k| h[k]=Hash.new(0)}
 ngramer = detector.ngramer
 while rs = ps_select.fetch
   id, title, lang, body = rs
+  title.sub!(/ - [^\-]+$/, '')
   text = LD::decode_entity(title + "\n" + body)
 
   ngramer.clear

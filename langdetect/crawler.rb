@@ -35,7 +35,7 @@ LanguageDetector::LANGLIST.each do |lang|
   rss.items.each do |item|
     rs = ps_select.execute(item.title)
     if !rs.fetch
-      body = item.description.gsub(/<[^>]*>/, ' ').gsub(/&nbsp;/, ' ').gsub(/[ \t]+/, ' ')
+      body = item.description.gsub(/<nobr>.*?<\/nobr>/, '').gsub(/<[^>]*>/, ' ').gsub(/&nbsp;/, ' ').gsub(/[ \t]+/, ' ')
       ps_insert.execute item.title, lang, body
     end
   end

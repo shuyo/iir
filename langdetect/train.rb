@@ -11,7 +11,7 @@ parser.parse!(ARGV)
 
 # Database
 db = LD::db_connect
-ps_select = db.prepare("select title,lang,body from news order by rand()")
+ps_select = db.prepare("select title,lang,body from news order by id desc")
 
 ps_select.execute
 n_k = Hash.new(0)
@@ -19,6 +19,7 @@ p_ik = Hash.new{|h,k| h[k]=Hash.new(0)}
 ngramer = LanguageDetector::Ngramer.new(opt[:N])
 while rs = ps_select.fetch
   title, lang, body = rs
+  title.sub!(/ - [^\-]+$/, '')
   next if n_k[lang] >= opt[:training_size]
   n_k[lang] += 1
   text = LD::decode_entity(title + "\n" + body)
