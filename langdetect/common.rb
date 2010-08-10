@@ -16,7 +16,7 @@ module LD
   def self.optparser
     @opt = {
       :host=>'localhost', :user=>'root', :passwd=>'', :dbname=>'googlenews', :port=>3306,
-      :model=>'model'
+      :model=>'model.json'
     }
 
     parser = OptionParser.new
