@@ -1,9 +1,13 @@
-#!/usr/bin/ruby -Ku
+#!/usr/bin/env ruby
+# -*- coding: utf-8 -*-
 
+require 'mysql'
+require 'json'
 require 'common.rb'
 require 'detect.rb'
+
 parser= LD::optparser
-opt = {:N=>3, :training_size=>150, :csv=>false}
+opt = {:N=>3, :training_size=>150, :csv=>false, :json=>false}
 parser.on('-n VAL', Integer, 'N-gram') {|v| opt[:N] = v }
 parser.on('--size=VAL', Integer, 'max size of training data') {|v| opt[:training_size] = v }
 parser.on('--csv') {|v| opt[:csv] = true }
@@ -11,7 +15,8 @@ parser.parse!(ARGV)
 
 # Database
 db = LD::db_connect
-ps_select = db.prepare("select title,lang,body from news order by id desc")
+#ps_select = db.prepare("select title,lang,body from news order by id desc")
+ps_select = db.prepare("select title,lang,body from news order by rand()")
 
 ps_select.execute
 n_k = Hash.new(0)
@@ -55,5 +60,7 @@ keys.each do |chunk|
 end
 
 p_ik.default = 0
-open(LD::model_filename, 'w'){|f| Marshal.dump([n_k, p_ik, opt[:N]], f) }
+open(LD::model_filename, 'w') do |f|
+  JSON.dump([n_k, p_ik, opt[:N]], f)
+end
 

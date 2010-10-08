@@ -1,7 +1,9 @@
-#!/usr/bin/ruby -Ku
+#!/usr/bin/env ruby
+# -*- coding: utf-8 -*-
 
 require 'common.rb'
 require 'detect.rb'
+
 parser= LD::optparser
 target_id = nil
 alpha = 1.0

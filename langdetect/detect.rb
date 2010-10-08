@@ -1,6 +1,10 @@
-#!/usr/bin/ruby -Ku
+#!/usr/bin/env ruby
+# -*- coding: utf-8 -*-
+
 # LanguageDetector : Language detection
 # (c)2010 Nakatani Shuyo / Cybozu Labs, Inc.
+
+require 'json'
 
 module LanguageDetector
   LANGLIST = [
@@ -15,6 +19,8 @@ module LanguageDetector
     "pl", # ポーランド語
     "hu", # ハンガリー語
     "el", # ギリシャ語
+    "uk", # ウクライナ語
+    "iw", # ヘブライ語
 
     # "da", # デンマーク語 (以下、Google News なし)
     # "fi", # フィンランド語
@@ -33,7 +39,7 @@ module LanguageDetector
 CLASS
 
   @cjk_class = Hash.new
-  CJK_CLASS.each do |line|
+  CJK_CLASS.each_line do |line|
     line.chomp!
     if line =~ /^./
       representative = $&
@@ -44,26 +50,19 @@ CLASS
   end
 
   def self.normalize(x)
-    if x[0] <= 65
+    if x.ord <= 64
       " "
     elsif @cjk_class.key?(x)
       @cjk_class[x]
-    elsif x =~ /^[\xd0-\xd1][\x80-\xbf]/      # Cyrillic
-      "\xd0\x96"
-    elsif x =~ /^[\xd8-\xd9][\x80-\xbf]/      # Arabic
-      "\xd8\xa6"
-    elsif x =~ /^\xe0[\xa4-\xa5][\x80-\xbf]/  # Devanagari
-      "\xe0\xa4\x85"
-    elsif x =~ /^\xe0[\xb8-\xb9][\x80-\xbf]/  # Thai
-      "\xe0\xb9\x91"
-    elsif x =~ /^\xe1[\xba-\xbb][\x80-\xbf]/  # Latin Extended Additional(Vietnam)
-      "\xe1\xba\xa1"
-    elsif x =~ /^\xe3[\x81-\x83][\x80-\xbf]/  # Hiragana / Katakana
-      "\xe3\x81\x82"
-    elsif x =~ /^\xea[\xb0-\xbf][\x80-\xbf]/  # Hangul Syllables 1
-      "\xea\xb0\x80"
-    elsif x =~ /^[\xeb-\xed][\x80-\xbf]{2}/   # Hangul Syllables 2
-      "\xed\x9e\x98"
+    elsif x =~ /^[\u0e00-\u0e7f]/ # ฀-๿ /^\xe0[\xb8-\xb9][\x80-\xbf]/  # Thai
+      ?\u0e11
+    elsif x =~ /^[\u1ea0-\u1eff]/ # Ẁ-ỿ /^\xe1[\xba-\xbb][\x80-\xbf]/  # Latin Extended Additional(Vietnam)
+      ?\u1ec3
+    elsif x =~ /^[\u3041-\u30f6]/ # ぁ-ヶ /^\xe3[\x81-\x83][\x80-\xbf]/  # Hiragana / Katakana
+      ?\u3042
+    elsif x =~ /^[\uac00-\ud7a3]/ # 가-꿿 /^\xea[\xb0-\xbf][\x80-\xbf]/  # Hangul Syllables 1
+                                  # 뀀-힣 /^[\xeb-\xed][\x80-\xbf]{2}/   # Hangul Syllables 2
+      ?\uac00
     else
       x
     end
@@ -96,9 +95,11 @@ CLASS
 
   class Detector
     def initialize(filename, alpha=1)
-      @n_k, @p_ik, @n = open(filename){|f| Marshal.load(f) }
+      @n_k, @p_ik, @n = open(filename){|f| JSON.load(f) }
+      @p_ik.each do |lang, freq|
+        freq.default = 0
+      end
       @n ||= 3
-      @p_ik.default = 0
       @alpha = alpha.to_f
       @debug = false
     end

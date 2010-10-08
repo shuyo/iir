@@ -1,6 +1,7 @@
-#!/usr/bin/ruby -Ku
+#!/usr/bin/env ruby
+# -*- coding: utf-8 -*-
 
-require 'rubygems'
+#require 'rubygems'
 require 'open-uri'
 require 'rss/2.0'
 
@@ -27,7 +28,9 @@ def rssurl(lang)
   end
 end
 
-LanguageDetector::LANGLIST.each do |lang|
+langlist = LanguageDetector::LANGLIST
+
+langlist.each do |lang|
   url = rssurl(lang)
   #puts url
   rss = open(url) {|f| RSS::Parser.parse(f.read, false) }
