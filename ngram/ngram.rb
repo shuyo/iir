@@ -60,8 +60,8 @@ model_ELE = Laplace.new(freq, freq2, count, 0.5)
 model_ELE.set_target(testtext)
 
 def loglikelihood(text, model)
-  logL = 0.0
-  logL2 = 0.0
+  logL = 0.0  # unigram
+  logL2 = 0.0 # bigram
   count = 0
   pre = nil
   text.scan(/\w+/) do |word|
@@ -94,8 +94,9 @@ puts "MLE:"
 logL, logL2, count = loglikelihood(traintext, model_MLE)
 crossent = -logL / count / Math.log(2)
 crossent2 = -logL2 / count / Math.log(2)
-puts "logL of train text(#{count} words) = #{logL}, cross entropy = #{crossent}"
-puts "logL2 of train text(#{count} words) = #{logL2}, cross entropy 2 = #{crossent2}"
+puts "train text(#{count} words)"
+puts "logL of unigrams = #{logL}, cross entropy = #{crossent}"
+puts "logL of bigrams = #{logL2}, cross entropy = #{crossent2}"
 #logL, count = loglikelihood(testtext, model_MLE)
 #crossent = -logL / count / Math.log(2)
 #puts "logL of test text(#{count} words, ignore unseen words) = #{logL}, cross entropy = #{crossent}"
