@@ -20,9 +20,8 @@ def load_corpus(filename):
     return corpus
 
 class HDPLDA:
-    def __init__(self, alpha, gamma, base):
+    def __init__(self, alpha, gamma):
         self.alpha = alpha
-        self.base = base
         self.gamma = gamma
 
     def set_corpus(self, corpus):
@@ -83,7 +82,7 @@ class HDPLDA:
     # n_??/m_? を用いて f_k を高速に計算
     def f_k_x_ji_fast(self, k, j, i):
         n_kv = self.n_kv[k].get(self.x_ji[j][i], 0)
-        return (n_kv + self.base) / (self.n_k[k] + self.base * len(self.vocas))
+        return (n_kv + 1) / (self.n_k[k] + len(self.vocas))
 
     def f_k_new_x_ji_fast(self):
         return 1.0 / len(self.vocas)
@@ -94,11 +93,11 @@ class HDPLDA:
     # 浮動小数の範囲を超えて非常に小さい値になることがあるので、対数を返す
     def log_f_k_new_x_jt_fast(self, j, target_t, n_v = False, n = 0):
         if not n_v: n_v = dict()
-        Vbase = self.base * len(self.vocas)
+        Vbase = len(self.vocas)
         p = 0.0
         for v, t in zip(self.x_ji[j], self.t_ji[j]):
             if t != target_t: continue
-            p += math.log(n_v.setdefault(v, 0) + self.base) - math.log(n + Vbase)
+            p += math.log(n_v.setdefault(v, 0) + 1) - math.log(n + Vbase)
             n_v[v] += 1
             n += 1
         return p
@@ -118,7 +117,7 @@ class HDPLDA:
                 g = gaurd(j, i, t)
                 if (k == target_k and not g) or (is_denom and g):
                     n_v[self.x_ji[j][i]] += 1
-        return sum([gammaln(self.base + n) for n in n_v]) - gammaln(self.base * V + sum(n_v))
+        return sum([gammaln(n + 1) for n in n_v]) - gammaln(V + sum(n_v))
 
     # p(x_ji|X_k^{-ji})
     def f_k_x_ji(self, k, target_j, target_i):
@@ -288,7 +287,6 @@ def main():
     parser.add_option("-f", dest="filename", help="corpus filename")
     parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha")
     parser.add_option("--gamma", dest="gamma", type="float", help="parameter gamma")
-    parser.add_option("--base", dest="base", type="float", help="parameter of base probability measure H")
     parser.add_option("-i", dest="iteration", type="int", help="iteration count")
     (options, args) = parser.parse_args()
     if not options.filename: parser.error("need corpus filename(-f)")
@@ -297,11 +295,10 @@ def main():
 
     alpha = options.alpha or scipy.stats.gamma.rvs(1,scale=1)
     gamma = options.gamma or scipy.stats.gamma.rvs(1,scale=1)
-    base  = options.base  or 0.5
     iteration = options.iteration or 10
-    print "alpha=", alpha, " gamma=", gamma, " base=", base
+    print "alpha=", alpha, " gamma=", gamma
 
-    hdplda = HDPLDA( alpha, gamma, base )
+    hdplda = HDPLDA( alpha, gamma)
     hdplda.set_corpus(corpus)
     hdplda.dump(True)
 
