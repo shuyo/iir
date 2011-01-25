@@ -98,7 +98,7 @@ def wce_features(LABELS):
     features = Features(LABELS)
     for label in LABELS:
         # keywords
-        for word in "Copyright|All Rights Reserved|広告掲載|会社概要|無断転載|プライバシーポリシー|利用規約|お問い合わせ|トラックバック|ニュースリリース|新着|無料|確認メール|コメントする|アソシエイト".split('|'):
+        for word in "Copyright|All Rights Reserved|広告掲載|会社概要|無断転載|プライバシーポリシー|利用規約|お問い合わせ|トラックバック|ニュースリリース|新着|無料|確認メール|コメントする|アソシエイト|プロフィール|カレンダー|カテゴリー".split('|'):
             features.add_feature( lambda x, y, w=word, l=label: 1 if x.has(w) and y == l else 0 )
             #features.add_feature( lambda x, y, w=word, l=label: 1 if re.search(w, x.org_text, re.I) and y == l else 0 )
 
