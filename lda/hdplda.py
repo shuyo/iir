@@ -9,15 +9,8 @@ import sys, re, math
 from optparse import OptionParser
 from scipy.special import gammaln
 import scipy.stats
-
-def load_corpus(filename):
-    corpus = []
-    f = open(filename, 'r')
-    for line in f:
-        doc = re.findall(r'\w+(?:\'\w+)?',line)
-        if len(doc)>0: corpus.append(doc)
-    f.close()
-    return corpus
+import vocabulary
+import numpy
 
 class HDPLDA:
     def __init__(self, alpha, gamma, base):
@@ -25,48 +18,40 @@ class HDPLDA:
         self.base = base
         self.gamma = gamma
 
-    def set_corpus(self, corpus):
+    def set_corpus(self, corpus, stopwords):
         self.x_ji = [] # vocabulary for each document and term
         self.t_ji = [] # table for each document and term
-
         self.k_jt = [] # topic for each document and table
         self.n_jt = [] # number of terms for each document and table
 
-        self.n_kv = [dict()] # number of terms for each topic and vocabulary
-        self.n_k = [] # number of terms for each topic
-        self.m_k = [] # number of tables for each topic
-
         self.tables = [] # available id of tables for each document
         self.topics = [0] # available id of topics
-
-        self.vocas = []
-        self.vocas_id = dict()
         self.n_terms = 0
-        self.n_tables = 0
 
+        voca = vocabulary.Vocabulary(stopwords)
+        n_v = dict()
         for doc in corpus:
-            x_i = []
-            for term in doc:
-                if term not in self.vocas_id:
-                    voca_id = len(self.vocas)
-                    self.vocas_id[term] = voca_id
-                    self.vocas.append(term)
-                    self.n_kv[0][voca_id] = 1
-                else:
-                    voca_id = self.vocas_id[term]
-                    self.n_kv[0][voca_id] += 1
-                x_i.append(voca_id)
+            x_i = voca.doc_to_ids(doc)
             self.x_ji.append(x_i)
+            for v in x_i:
+                if v in n_v:
+                    n_v[v] += 1
+                else:
+                    n_v[v] = 1
 
             self.k_jt.append([0])
-            self.n_jt.append([len(doc)])
-            self.n_terms += len(doc)
-            self.t_ji.append([0] * len(doc))
+            self.n_jt.append([len(x_i)])
+            self.n_terms += len(x_i)
+            self.t_ji.append([0] * len(x_i))
             self.tables.append([0])
 
-        self.n_k = [self.n_terms]
-        self.m_k = [len(corpus)]
+        self.n_kv = [n_v] # number of terms for each topic and vocabulary
+        self.n_k = [self.n_terms] # number of terms for each topic
+        self.m_k = [len(corpus)] # number of tables for each topic
         self.n_tables = len(corpus)
+
+        self.V = voca.size()
+        return voca
 
     def dump(self, disp_x=False):
         if disp_x: print "x_ji:", self.x_ji
@@ -83,10 +68,10 @@ class HDPLDA:
     # n_??/m_? を用いて f_k を高速に計算
     def f_k_x_ji_fast(self, k, j, i):
         n_kv = self.n_kv[k].get(self.x_ji[j][i], 0)
-        return (n_kv + self.base) / (self.n_k[k] + self.base * len(self.vocas))
+        return (n_kv + self.base) / (self.n_k[k] + self.base * self.V)
 
     def f_k_new_x_ji_fast(self):
-        return 1.0 / len(self.vocas)
+        return 1.0 / self.V
 
     def log_f_k_x_jt_fast(self, k, j, t):
         return self.log_f_k_new_x_jt_fast(j, t, self.n_kv[k].copy(), self.n_k[k])
@@ -94,7 +79,7 @@ class HDPLDA:
     # 浮動小数の範囲を超えて非常に小さい値になることがあるので、対数を返す
     def log_f_k_new_x_jt_fast(self, j, target_t, n_v = False, n = 0):
         if not n_v: n_v = dict()
-        Vbase = self.base * len(self.vocas)
+        Vbase = self.base * self.V
         p = 0.0
         for v, t in zip(self.x_ji[j], self.t_ji[j]):
             if t != target_t: continue
@@ -109,8 +94,7 @@ class HDPLDA:
     # ただし固定の正規化項 Γ(Σβ)/ΠΓ(β) は含まない
     # 浮動小数の範囲を超えて非常に小さい値になることがあるので、対数を返す
     def log_p_X_k(self, target_k, gaurd, is_denom=False):
-        V = len(self.vocas)
-        n_v = [0] * V
+        n_v = [0] * self.V
         for j in range(len(self.x_ji)):
             for i in range(len(self.x_ji[j])):
                 t = self.t_ji[j][i]
@@ -118,7 +102,7 @@ class HDPLDA:
                 g = gaurd(j, i, t)
                 if (k == target_k and not g) or (is_denom and g):
                     n_v[self.x_ji[j][i]] += 1
-        return sum([gammaln(self.base + n) for n in n_v]) - gammaln(self.base * V + sum(n_v))
+        return sum([gammaln(self.base + n) for n in n_v]) - gammaln(self.base * self.V + sum(n_v))
 
     # p(x_ji|X_k^{-ji})
     def f_k_x_ji(self, k, target_j, target_i):
@@ -181,7 +165,7 @@ class HDPLDA:
 
     # 事後分布から t をサンプリング
     def sampling_t(self, j, i):
-        assert [sum(x.values()) for x in self.n_kv] == self.n_k
+        #assert [sum(x.values()) for x in self.n_kv] == self.n_k
 
         v = self.x_ji[j][i]
         t_old = self.t_ji[j][i]
@@ -198,7 +182,7 @@ class HDPLDA:
             self.n_tables -= 1
 
         if self.m_k[k_old] == 0:
-            assert self.n_k[k_old] == 0
+            #assert self.n_k[k_old] == 0
             # 客がいなくなった料理(トピック)
             self.topics.remove(k_old)
             self.n_kv[k_old] = dict()
@@ -207,11 +191,11 @@ class HDPLDA:
         p_t = [self.n_jt[j][t] * self.f_k_x_ji_fast(self.k_jt[j][t], j, i) for t in self.tables[j]]
 
         f = self.f_k_new_x_ji_fast()
-        assert abs(self.f_k_x_ji(-1, j, i) - f) < 1e-10, self.dump()
+        #assert abs(self.f_k_x_ji(-1, j, i) - f) < 1e-10, self.dump()
         p_x_ji = self.gamma * f
         for k in self.topics:
             f = self.f_k_x_ji_fast(k, j, i)
-            assert abs(self.f_k_x_ji(k, j, i) - f) < 1e-10, self.dump()
+            #assert abs(self.f_k_x_ji(k, j, i) - f) < 1e-10, self.dump()
             p_x_ji += self.m_k[k] * f
         p_t.append(p_x_ji * self.alpha / (self.n_tables + self.gamma))
 
@@ -228,7 +212,7 @@ class HDPLDA:
         k_new = self.k_jt[j][t_new]
         self.n_k[k_new] += 1
         self.n_kv[k_new][v] = self.n_kv[k_new].get(v, 0) + 1
-        assert [sum(x.values()) for x in self.n_kv] == self.n_k
+        #assert [sum(x.values()) for x in self.n_kv] == self.n_k
 
     # 事後分布から k をサンプリング
     def sampling_k(self, j, t):
@@ -238,10 +222,10 @@ class HDPLDA:
         if self.m_k[k_old] > 0:
             for v, t1 in zip(self.x_ji[j], self.t_ji[j]):
                 if t1 != t: continue
-                assert self.n_kv[k_old][v] > 0
+                #assert self.n_kv[k_old][v] > 0
                 self.n_kv[k_old][v] -= 1
         else:
-            assert self.n_k[k_old] == 0
+            #assert self.n_k[k_old] == 0
             self.n_kv[k_old] = dict()
             self.topics.remove(k_old)
 
@@ -249,10 +233,10 @@ class HDPLDA:
         log_p_k = []
         for k in self.topics:
             f = self.log_f_k_x_jt_fast(k, j, t)
-            assert abs(f - self.log_f_k_x_jt(k, j, t)) < 1e-10, self.dump()
+            #assert abs(f - self.log_f_k_x_jt(k, j, t)) < 1e-10, self.dump()
             log_p_k.append(f + math.log(self.m_k[k]))
         f = self.log_f_k_new_x_jt_fast(j, t)
-        assert abs(f - self.log_f_k_x_jt(-1, j, t)) < 1e-10, self.dump()
+        #assert abs(f - self.log_f_k_x_jt(-1, j, t)) < 1e-10, self.dump()
         p = math.log(self.gamma) + f
         log_p_k.append(p)
 
@@ -277,40 +261,52 @@ class HDPLDA:
             for t in self.tables[j]:
                 self.sampling_k(j, t)
 
-    def perplexity(self, doc):
-        log_p = 0.0
-        for word in doc:
-            log_p += 0
-            pass
-        return exp(-log_p / len(doc))
+    def worddist(self):
+        def freq2prob(freq, n_k, base, V):
+            prob = numpy.zeros(V)
+            for v in freq:
+                prob[v] = (freq[v] + base) / (n_k + V * base)
+            return prob
+        return [freq2prob(self.n_kv[k], self.n_k[k], self.base, self.V) for k in self.topics]
+
+    def predictive(self, doc):
+        pass
 
 def main():
     parser = OptionParser()
     parser.add_option("-f", dest="filename", help="corpus filename")
-    parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha")
-    parser.add_option("--gamma", dest="gamma", type="float", help="parameter gamma")
-    parser.add_option("--base", dest="base", type="float", help="parameter of base probability measure H")
-    parser.add_option("-i", dest="iteration", type="int", help="iteration count")
+    parser.add_option("-r", dest="reuters", help="corpus range of Reuters' files(start:end)")
+    parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha", default=scipy.stats.gamma.rvs(1,scale=1))
+    parser.add_option("--gamma", dest="gamma", type="float", help="parameter gamma", default=scipy.stats.gamma.rvs(1,scale=1))
+    parser.add_option("--base", dest="base", type="float", help="parameter of base measure H", default=0.5)
+    parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=10)
+    parser.add_option("-s", dest="stopwords", type="int", help="except stop words", default=1)
     (options, args) = parser.parse_args()
-    if not options.filename: parser.error("need corpus filename(-f)")
+    if not (options.filename or options.reuters): parser.error("need corpus filename(-f) or Reuters range(-r)")
 
-    corpus = load_corpus(options.filename)
+    if options.filename:
+        corpus = vocabulary.load_corpus(options.filename)
+    else:
+        corpus = vocabulary.load_reuters(options.reuters)
+        if not corpus: parser.error("Reuters range(-r) forms 'start:end'")
 
-    alpha = options.alpha or scipy.stats.gamma.rvs(1,scale=1)
-    gamma = options.gamma or scipy.stats.gamma.rvs(1,scale=1)
-    base  = options.base  or 0.5
-    iteration = options.iteration or 10
-    print "alpha=", alpha, " gamma=", gamma, " base=", base
+    hdplda = HDPLDA( options.alpha, options.gamma, options.base )
+    voca = hdplda.set_corpus(corpus, options.stopwords)
+    #hdplda.dump(True)
+    print "corpus=%d words=%d alpha=%f gamma=%f base=%f" % (len(corpus), len(voca.vocas), options.alpha, options.gamma, options.base)
 
-    hdplda = HDPLDA( alpha, gamma, base )
-    hdplda.set_corpus(corpus)
-    hdplda.dump(True)
-
-    for i in range(iteration):
-        print "----", i + 1
+    for i in range(options.iteration):
+        sys.stderr.write("-%d " % (i + 1))
         hdplda.inference()
-        hdplda.dump()
+        #hdplda.dump()
 
+    phi = hdplda.worddist()
+    #for v, term in enumerate(voca):
+    #    print ','.join([term]+[str(x) for x in phi[:,v]])
+    for k in range(len(phi)):
+        print "\n-- topic: %d" % k
+        for w in numpy.argsort(-phi[k])[:20]:
+            print "%s: %f" % (voca[w], phi[k][w])
 
 if __name__ == "__main__":
     main()

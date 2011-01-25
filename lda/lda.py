@@ -14,9 +14,9 @@ class LDA:
         self.alpha = alpha # parameter of topics prior
         self.beta = beta   # parameter of words prior
 
-    def set_corpus(self, corpus):
+    def set_corpus(self, corpus, stopwords):
         """set courpus and initialize"""
-        voca = vocabulary.Vocabulary()
+        voca = vocabulary.Vocabulary(stopwords)
         self.docs = [voca.doc_to_ids(doc) for doc in corpus]
 
         M = len(self.docs)
@@ -68,10 +68,11 @@ def main():
     parser = OptionParser()
     parser.add_option("-f", dest="filename", help="corpus filename")
     parser.add_option("-r", dest="reuters", help="corpus range of Reuters' files(start:end)")
-    parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha", default=0.001)
-    parser.add_option("--beta", dest="beta", type="float", help="parameter beta", default=0.001)
+    parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha", default=0.5)
+    parser.add_option("--beta", dest="beta", type="float", help="parameter beta", default=0.5)
     parser.add_option("-k", dest="K", type="int", help="number of topics", default=20)
     parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=100)
+    parser.add_option("-s", dest="stopwords", type="int", help="except stop words", default=1)
     (options, args) = parser.parse_args()
     if not (options.filename or options.reuters): parser.error("need corpus filename(-f) or Reuters range(-r)")
 
@@ -81,7 +82,7 @@ def main():
         corpus = vocabulary.load_reuters(options.reuters)
         if not corpus: parser.error("Reuters range(-r) forms 'start:end'")
     lda = LDA(options.K, options.alpha, options.beta)
-    voca = lda.set_corpus(corpus)
+    voca = lda.set_corpus(corpus, options.stopwords)
     print "corpus=%d, words=%d, K=%d, a=%f, b=%f" % (len(corpus), len(voca.vocas), options.K, options.alpha, options.beta)
 
     for i in range(options.iteration):

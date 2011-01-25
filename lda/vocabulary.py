@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import nltk, re
 
-def load_reuters(start, end):
+def load_reuters(range):
     m = re.match(r'(\d+):(\d+)$', range)
     if m:
         start = int(m.group(1))
