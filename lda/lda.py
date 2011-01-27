@@ -18,6 +18,7 @@ class LDA:
         """set courpus and initialize"""
         voca = vocabulary.Vocabulary(stopwords)
         self.docs = [voca.doc_to_ids(doc) for doc in corpus]
+        self.n_m = numpy.array([len(doc) for doc in self.docs])
 
         M = len(self.docs)
         self.V = voca.size()
@@ -56,12 +57,24 @@ class LDA:
                 self.n_z_t[new_z, t] += 1
                 self.n_z[new_z] += 1
 
-    def phi(self):
+    def worddist(self):
         return (self.n_z_t + self.beta) / (self.n_z[:, numpy.newaxis] + self.V * self.beta)
 
-    def predictive(self, doc):
-        pass
+    def perplexity(self):
+        phi = self.worddist()
+        log_per = 0
+        N = 0
+        for m, doc in zip(range(len(self.docs)), self.docs):
+            theta = (self.n_m_z[m,:] + self.alpha) / (len(doc) + self.K * self.alpha)
+            for w in doc:
+                log_per -= numpy.log(numpy.inner(phi[:,w], theta))
+            N += len(doc)
+        return numpy.exp(log_per / N)
 
+    def log_predictive(self, testdoc):
+        phi = self.worddist()
+        e_theta = (self.n_z + self.alpha) / (self.n_z.sum() + self.K * self.alpha)
+        return numpy.sum([numpy.log(numpy.inner(phi[:,w], e_theta)) for w in testdoc])
 
 
 def main():
@@ -85,12 +98,13 @@ def main():
     voca = lda.set_corpus(corpus, options.stopwords)
     print "corpus=%d, words=%d, K=%d, a=%f, b=%f" % (len(corpus), len(voca.vocas), options.K, options.alpha, options.beta)
 
+    print lda.perplexity()
     for i in range(options.iteration):
         sys.stderr.write("-%d " % (i + 1))
         lda.inference()
-    #print lda.z_m_n
+        print lda.perplexity()
 
-    phi = lda.phi()
+    phi = lda.worddist()
     #for v, term in enumerate(voca):
     #    print ','.join([term]+[str(x) for x in phi[:,v]])
     for k in range(options.K):
