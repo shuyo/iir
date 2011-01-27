@@ -47,8 +47,7 @@ class LDA:
                 self.n_z[z] -= 1
 
                 # sampling topic new_z for t
-                denom_b = self.n_z_t.sum(axis=1) + vbeta
-                p_z = (self.n_z_t[:, t] + self.beta) * (self.n_m_z[m] + self.alpha) / denom_b
+                p_z = (self.n_z_t[:, t] + self.beta) * (self.n_m_z[m] + self.alpha) / (self.n_z + vbeta)
                 new_z = numpy.random.multinomial(1, p_z / p_z.sum()).argmax()
 
                 # set z the new topic and increment counters
@@ -105,8 +104,6 @@ def main():
         print lda.perplexity()
 
     phi = lda.worddist()
-    #for v, term in enumerate(voca):
-    #    print ','.join([term]+[str(x) for x in phi[:,v]])
     for k in range(options.K):
         print "\n-- topic: %d" % k
         for w in numpy.argsort(-phi[k,:])[:20]:
