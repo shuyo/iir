@@ -5,7 +5,7 @@
 # (c)2010 Nakatani Shuyo / Cybozu Labs Inc.
 # (refer to "Hierarchical Dirichlet Processes"(Teh et.al, 2005))
 
-import sys, re, math
+import sys, re
 from optparse import OptionParser
 import vocabulary
 import numpy
@@ -76,12 +76,13 @@ class HDPLDA:
 
     # 浮動小数の範囲を超えて非常に小さい値になることがあるので、対数を返す
     def log_f_k_new_x_jt_fast(self, j, target_t, n_v = None, n = 0):
-        if n_v == None: n_v = numpy.zeros(self.V, dtype=int)
-        Vbase = self.base * self.V
+        if n_v == None:
+            n_v = numpy.zeros(self.V, dtype=int)
+        base = numpy.log(n + self.base * self.V)
         p = 0.0
         for v, t in zip(self.x_ji[j], self.t_ji[j]):
             if t != target_t: continue
-            p += math.log(n_v[v] + self.base) - math.log(n + Vbase)
+            p += numpy.log(n_v[v] + self.base) - base
             n_v[v] += 1
             n += 1
         return p
