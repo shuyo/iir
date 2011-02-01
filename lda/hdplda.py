@@ -90,11 +90,7 @@ class HDPLDA:
     # 分布から k をサンプリング
     # 新しいトピックの場合、パラメータの領域を確保
     def sampling_topic(self, p_k):
-        Z = sum(p_k)
-        p_k = [p / Z for p in p_k]
-        #dist = scipy.stats.rv_discrete(values=(self.topics + [-1], p_k))
-        #k_new = dist.rvs()
-        drawing = numpy.random.multinomial(1, p_k).argmax()
+        drawing = numpy.random.multinomial(1, p_k / p_k.sum()).argmax()
         # 新しいトピック
         if drawing < len(self.topics):
             k_new = self.topics[drawing]
@@ -131,7 +127,7 @@ class HDPLDA:
         # sampling of k (新しいテーブルの料理(トピック))
         p_k = [self.m_k[k] * self.f_k_x_ji_fast(k, j, i) for k in self.topics]
         p_k.append(self.gamma * self.f_k_new_x_ji_fast())
-        k_new = self.sampling_topic(p_k)
+        k_new = self.sampling_topic(numpy.array(p_k))
 
         self.k_jt[j][t_new] = k_new
         self.m_k[k_new] += 1
@@ -158,7 +154,6 @@ class HDPLDA:
         if self.m_k[k_old] == 0:
             # 客がいなくなった料理(トピック)
             self.topics.remove(k_old)
-            #self.n_kv[k_old] = dict() # 零ベクトルになっているはず
 
         # sampling of t ( p(t_ji=t) を求める )
         p_t = [self.n_jt[j][t] * self.f_k_x_ji_fast(self.k_jt[j][t], j, i) for t in self.tables[j]]
@@ -170,8 +165,6 @@ class HDPLDA:
 
         p_t = numpy.array(p_t)
         p_t /= p_t.sum()
-        #dist = scipy.stats.rv_discrete(values=(self.tables[j] + [-1], p_t))
-        #t_new = dist.rvs()
         drawing = numpy.random.multinomial(1, p_t).argmax()
         if drawing == len(self.tables[j]):
             t_new = self.new_table(j, i)
@@ -196,7 +189,6 @@ class HDPLDA:
                 if t1 != t: continue
                 self.n_kv[k_old, v] -= 1
         else:
-            #self.n_kv[k_old] = dict() # 零ベクトルになっているはず
             self.topics.remove(k_old)
 
         # sampling of k
