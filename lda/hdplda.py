@@ -46,7 +46,7 @@ class HDPLDA:
                 self.n_kv[0, v] += 1
 
         self.n_tables = len(corpus)
-        self.m_k = [self.n_tables] # number of tables for each topic
+        self.m_k = numpy.array([self.n_tables]) # number of tables for each topic
         self.n_k = [self.n_terms]  # number of terms for each topic
 
         return voca
@@ -78,11 +78,11 @@ class HDPLDA:
     def log_f_k_new_x_jt_fast(self, j, target_t, n_v = None, n = 0):
         if n_v == None:
             n_v = numpy.zeros(self.V, dtype=int)
-        base = numpy.log(n + self.base * self.V)
+        Vbase = self.base * self.V
         p = 0.0
         for v, t in zip(self.x_ji[j], self.t_ji[j]):
             if t != target_t: continue
-            p += numpy.log(n_v[v] + self.base) - base
+            p += numpy.log(n_v[v] + self.base) - numpy.log(n + Vbase)
             n_v[v] += 1
             n += 1
         return p
@@ -96,14 +96,15 @@ class HDPLDA:
             k_new = self.topics[drawing]
         else:
             # 空きトピックIDを取得(あれば再利用)
-            K = len(self.m_k)
+            K = self.m_k.size
             for k_new in range(K):
                 if k_new not in self.topics: break
             else:
                 # なければ新しいテーブルID
                 k_new = K
                 self.n_k.append(0)
-                self.m_k.append(0)
+                self.m_k = numpy.resize(self.m_k, K + 1)
+                self.m_k[k_new] = 0
                 self.n_kv = numpy.resize(self.n_kv, (k_new+1, self.V)) # self.n_kv.append(dict())
                 self.n_kv[k_new, :] = numpy.zeros(self.V, dtype=int)
             self.topics.append(k_new)
@@ -111,9 +112,9 @@ class HDPLDA:
 
     # 客 x_ji を新しいテーブルに案内
     # テーブルのトピック(料理)もサンプリング
-    def new_table(self, j, i):
+    def new_table(self, j, i, f_k):
         # 空きテーブルIDを取得
-        T_j = len(self.n_jt[j])
+        T_j = self.n_jt[j].size
         for t_new in range(T_j):
             if t_new not in self.tables[j]: break
         else:
@@ -125,9 +126,9 @@ class HDPLDA:
         self.n_tables += 1
 
         # sampling of k (新しいテーブルの料理(トピック))
-        p_k = [self.m_k[k] * self.f_k_x_ji_fast(k, j, i) for k in self.topics]
+        p_k = [self.m_k[k] * f_k[k] for k in self.topics]
         p_k.append(self.gamma * self.f_k_new_x_ji_fast())
-        k_new = self.sampling_topic(numpy.array(p_k))
+        k_new = self.sampling_topic(numpy.array(p_k, copy=False))
 
         self.k_jt[j][t_new] = k_new
         self.m_k[k_new] += 1
@@ -151,23 +152,23 @@ class HDPLDA:
             self.m_k[k_old] -= 1
             self.n_tables -= 1
 
-        if self.m_k[k_old] == 0:
-            # 客がいなくなった料理(トピック)
-            self.topics.remove(k_old)
+            if self.m_k[k_old] == 0:
+                # 客がいなくなった料理(トピック)
+                self.topics.remove(k_old)
 
         # sampling of t ( p(t_ji=t) を求める )
-        p_t = [self.n_jt[j][t] * self.f_k_x_ji_fast(self.k_jt[j][t], j, i) for t in self.tables[j]]
-
-        p_x_ji = self.gamma * self.f_k_new_x_ji_fast()
+        f_k = numpy.zeros(self.m_k.size)
         for k in self.topics:
-            p_x_ji += self.m_k[k] * self.f_k_x_ji_fast(k, j, i)
+            f_k[k] = self.f_k_x_ji_fast(k, j, i)
+        p_t = [self.n_jt[j][t] * f_k[self.k_jt[j][t]] for t in self.tables[j]]
+        p_x_ji = numpy.inner(self.m_k, f_k) + self.gamma * self.f_k_new_x_ji_fast()
         p_t.append(p_x_ji * self.alpha / (self.n_tables + self.gamma))
 
-        p_t = numpy.array(p_t)
+        p_t = numpy.array(p_t, copy=False)
         p_t /= p_t.sum()
         drawing = numpy.random.multinomial(1, p_t).argmax()
         if drawing == len(self.tables[j]):
-            t_new = self.new_table(j, i)
+            t_new = self.new_table(j, i, f_k)
         else:
             t_new = self.tables[j][drawing]
 
@@ -195,7 +196,7 @@ class HDPLDA:
         # 確率が小さくなりすぎるので log で保持。最大値を引いてからexp&正規化
         K = len(self.topics)
         log_p_k = numpy.zeros(K+1)
-        for i, k in zip(range(K), self.topics):
+        for i, k in enumerate(self.topics):
             log_p_k[i] = self.log_f_k_x_jt_fast(k, j, t) + numpy.log(self.m_k[k])
         log_p_k[K] = self.log_f_k_new_x_jt_fast(j, t) + numpy.log(self.gamma)
         k_new = self.sampling_topic(numpy.exp(log_p_k - log_p_k.max()))
@@ -209,10 +210,9 @@ class HDPLDA:
             self.n_kv[k_new, v] += 1
 
     def inference(self):
-        for j in range(len(self.x_ji)):
-            for i in range(len(self.x_ji[j])):
+        for j, x_i in enumerate(self.x_ji):
+            for i in range(len(x_i)):
                 self.sampling_t(j, i)
-        for j in range(len(self.x_ji)):
             for t in self.tables[j]:
                 self.sampling_k(j, t)
 
@@ -267,10 +267,10 @@ def main():
     phi = hdplda.worddist()
     #for v, term in enumerate(voca):
     #    print ','.join([term]+[str(x) for x in phi[:,v]])
-    for k in range(len(phi)):
+    for k, phi_k in enumerate(phi):
         print "\n-- topic: %d" % k
-        for w in numpy.argsort(-phi[k])[:20]:
-            print "%s: %f" % (voca[w], phi[k][w])
+        for w in numpy.argsort(-phi_k)[:20]:
+            print "%s: %f" % (voca[w], phi_k[w])
 
 if __name__ == "__main__":
     main()
