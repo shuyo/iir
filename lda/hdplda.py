@@ -229,24 +229,36 @@ class HDPLDA:
 
     def worddist(self):
         return [(self.n_kv[k] + self.base) / (self.n_k[k] + self.V * self.base) for k in self.topics]
-        """
-        def freq2prob(freq, n_k, base, V):
-            prob = numpy.zeros(V)
-            for v in freq:
-                prob[v] = (freq[v] + base) / (n_k + V * base)
-            return prob
-        return [freq2prob(self.n_kv[k], self.n_k[k], self.base, self.V) for k in self.topics]
-        """
 
     def perplexity(self):
-        
-        pass
+        phi = self.worddist()
+        phi.append(numpy.zeros(self.V) + 1.0 / self.V)
+        log_per = 0
+        N = 0
+        for j, x_i in enumerate(self.x_ji):
+            p_k = numpy.zeros(self.m_k.size)    # topic dist for document 
+            for t in self.tables[j]:
+                k = self.k_jt[j][t]
+                p_k[k] += self.n_jt[j][t]
+            p_k /= len(x_i) + self.alpha
+            
+            p_k_parent = self.alpha / (len(x_i) + self.alpha)
+            p_k += p_k_parent * (self.m_k / (self.n_tables + self.gamma))
+            
+            theta = [p_k[k] for k in self.topics]
+            theta.append(p_k_parent * (self.gamma / (self.n_tables + self.gamma)))
+
+            for v in x_i:
+                log_per -= numpy.log(numpy.inner([p[v] for p in phi], theta))
+            N += len(x_i)
+        return numpy.exp(log_per / N)
 
 
 def hdplda_learning(hdplda, iteration):
     for i in range(iteration):
-        sys.stderr.write("-%d " % (i + 1))
+        sys.stderr.write("-%d %f\n" % (i + 1, hdplda.perplexity()))
         hdplda.inference()
+    print hdplda.perplexity()
     return hdplda
 
 def main():
