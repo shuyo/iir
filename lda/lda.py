@@ -28,7 +28,7 @@ class LDA:
         self.n_z_t = numpy.zeros((self.K, self.V), dtype=int) # word count of each topic and vocabulary
         self.n_z = numpy.zeros(self.K, dtype=int)        # word count of each topic
 
-        for m, doc in zip(range(M), self.docs):
+        for m, doc in enumerate(self.docs):
             z_n = numpy.random.randint(0, self.K, len(doc))
             self.z_m_n.append(z_n)
             for t, z in zip(doc, z_n):
@@ -38,8 +38,9 @@ class LDA:
         return voca
 
     def inference(self):
+        """learning once iteration"""
         vbeta = self.V * self.beta
-        for m, doc in zip(range(len(self.docs)), self.docs):
+        for m, doc in enumerate(self.docs):
             for n, t, z in zip(range(len(doc)), doc, self.z_m_n[m]):
                 # discount for n-th word t with topic z
                 self.n_m_z[m, z] -= 1
@@ -57,23 +58,19 @@ class LDA:
                 self.n_z[new_z] += 1
 
     def worddist(self):
+        """get topic-word distribution"""
         return (self.n_z_t + self.beta) / (self.n_z[:, numpy.newaxis] + self.V * self.beta)
 
     def perplexity(self):
         phi = self.worddist()
         log_per = 0
         N = 0
-        for m, doc in zip(range(len(self.docs)), self.docs):
+        for m, doc in enumerate(self.docs):
             theta = (self.n_m_z[m,:] + self.alpha) / (len(doc) + self.K * self.alpha)
             for w in doc:
                 log_per -= numpy.log(numpy.inner(phi[:,w], theta))
             N += len(doc)
         return numpy.exp(log_per / N)
-
-    def log_predictive(self, testdoc):
-        phi = self.worddist()
-        e_theta = (self.n_z + self.alpha) / (self.n_z.sum() + self.K * self.alpha)
-        return numpy.sum([numpy.log(numpy.inner(phi[:,w], e_theta)) for w in testdoc])
 
 
 def main():
