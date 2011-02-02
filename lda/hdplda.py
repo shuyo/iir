@@ -5,16 +5,20 @@
 # (c)2010 Nakatani Shuyo / Cybozu Labs Inc.
 # (refer to "Hierarchical Dirichlet Processes"(Teh et.al, 2005))
 
-import sys, re
+import sys, numpy
 from optparse import OptionParser
 import vocabulary
-import numpy
 
 class HDPLDA:
     def __init__(self, alpha, gamma, base):
         self.alpha = alpha
         self.base = base
         self.gamma = gamma
+
+        # cache of calculation
+        self.cur_log_V_base_cache = [0]
+        self.log_base_cache = [numpy.log(self.base)]
+        self.log_base_cache_len = 1
 
     def set_corpus(self, corpus, stopwords):
         self.x_ji = [] # vocabulary for each document and term
@@ -51,6 +55,7 @@ class HDPLDA:
         self.n_k = [self.n_terms]  # number of terms for each topic
 
         self.gamma_f_k_new_x_ji = self.gamma / self.V
+        self.Vbase = self.V * self.base
 
         return voca
 
@@ -65,16 +70,34 @@ class HDPLDA:
         print "tables:", self.tables
         print "topics:", self.topics
 
+    # 計算高速化のためのキャッシュ類
     def updated_n_tables(self):
         self.alpha_over_T_gamma = self.alpha / (self.n_tables + self.gamma)
 
+    def cur_log_V_base(self, n):
+        """cache of \sum_{i=0}^{n-1} numpy.log(i + self.base * self.V)"""
+        N = len(self.cur_log_V_base_cache)
+        if n < N: return self.cur_log_V_base_cache[n]
+        s = self.cur_log_V_base_cache[-1]
+        while N <= n:
+            s += numpy.log(N + self.Vbase)
+            self.cur_log_V_base_cache.append(s)
+            N += 1
+        return s
+
+    def log_base(self, n):
+        """cache of numpy.log(n + self.base)"""
+        N = self.log_base_cache_len #len(self.log_base_cache)
+        if n < N: return self.log_base_cache[n]
+        while N <= n:
+            self.log_base_cache.append(numpy.log(N + self.base))
+            N += 1
+        self.log_base_cache_len= N
+        return self.log_base_cache[-1]
+
     # n_??/m_? を用いて f_k を高速に計算
     def f_k_x_ji_fast(self, k, v):
-        n_kv = self.n_kv[k, v]
-        return (n_kv + self.base) / (self.n_k[k] + self.base * self.V)
-
-    def f_k_new_x_ji_fast(self):
-        return 1.0 / self.V
+        return (self.n_kv[k, v] + self.base) / (self.n_k[k] + self.Vbase)
 
     def log_f_k_x_jt_fast(self, k, j, t):
         return self.log_f_k_new_x_jt_fast(j, t, self.n_kv[k, :].copy(), self.n_k[k])
@@ -83,17 +106,17 @@ class HDPLDA:
     def log_f_k_new_x_jt_fast(self, j, target_t, n_v = None, n = 0):
         if n_v == None:
             n_v = numpy.zeros(self.V, dtype=int)
-        Vbase = self.base * self.V
         p = 0.0
         x_i = self.x_ji[j]
         t_i = self.t_ji[j]
+        n0 = n
         for i, t in enumerate(t_i):
             if t == target_t:
                 v = x_i[i]
-                p += numpy.log(n_v[v] + self.base) - numpy.log(n + Vbase)
+                p += self.log_base(n_v[v]) # numpy.log(n_v[v] + self.base) - numpy.log(n + self.base * self.V)
                 n_v[v] += 1
                 n += 1
-        return p
+        return p - self.cur_log_V_base(n) + self.cur_log_V_base(n0)
 
     # 分布から k をサンプリング
     # 新しいトピックの場合、パラメータの領域を確保
@@ -136,7 +159,7 @@ class HDPLDA:
 
         # sampling of k (新しいテーブルの料理(トピック))
         p_k = [self.m_k[k] * f_k[k] for k in self.topics]
-        p_k.append(self.gamma * self.f_k_new_x_ji_fast())
+        p_k.append(self.gamma_f_k_new_x_ji) # self.gamma * self.f_k_new_x_ji_fast()
         k_new = self.sampling_topic(numpy.array(p_k, copy=False))
 
         self.k_jt[j][t_new] = k_new
@@ -228,7 +251,7 @@ class HDPLDA:
                 self.sampling_k(j, t)
 
     def worddist(self):
-        return [(self.n_kv[k] + self.base) / (self.n_k[k] + self.V * self.base) for k in self.topics]
+        return [(self.n_kv[k] + self.base) / (self.n_k[k] + self.Vbase) for k in self.topics]
 
     def perplexity(self):
         phi = self.worddist()
@@ -284,9 +307,10 @@ def main():
     #hdplda.dump(True)
     print "corpus=%d words=%d alpha=%f gamma=%f base=%f" % (len(corpus), len(voca.vocas), options.alpha, options.gamma, options.base)
 
-    import cProfile
-    numpy.random.seed(0) # for profiling
-    cProfile.runctx('hdplda_learning(hdplda, options.iteration)', globals(), locals(), 'hdplda.profile.txt')
+    #import cProfile
+    #numpy.random.seed(0) # for profiling
+    #cProfile.runctx('hdplda_learning(hdplda, options.iteration)', globals(), locals(), 'hdplda.profile.txt')
+    hdplda_learning(hdplda, options.iteration)
 
     phi = hdplda.worddist()
     #for v, term in enumerate(voca):
