@@ -7,8 +7,8 @@ def load_reuters(range):
     if m:
         start = int(m.group(1))
         end = int(m.group(2))
-        from nltk.corpus import reuters
-        return [reuters.words(fileid) for fileid in reuters.fileids()[start:end]]
+        from nltk.corpus import brown as corpus
+        return [corpus.words(fileid) for fileid in corpus.fileids()[start:end]]
 
 def load_corpus(filename):
     corpus = []

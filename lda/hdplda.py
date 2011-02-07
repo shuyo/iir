@@ -2,11 +2,12 @@
 # -*- coding: utf-8 -*-
 
 # Hierarchical Dirichlet Process - Latent Dirichlet Allocation
-# (c)2010 Nakatani Shuyo / Cybozu Labs Inc.
+# (c)2010-2011 Nakatani Shuyo / Cybozu Labs Inc.
 # (refer to "Hierarchical Dirichlet Processes"(Teh et.al, 2005))
 
-import sys, numpy
-from optparse import OptionParser
+import sys
+import optparse
+import numpy
 import vocabulary
 
 class HDPLDA:
@@ -70,7 +71,7 @@ class HDPLDA:
         print "tables:", self.tables
         print "topics:", self.topics
 
-    # 計算高速化のためのキャッシュ類
+    # cache for faster calcuration
     def updated_n_tables(self):
         self.alpha_over_T_gamma = self.alpha / (self.n_tables + self.gamma)
 
@@ -118,7 +119,7 @@ class HDPLDA:
                 n += 1
         return p - self.cur_log_V_base(n) + self.cur_log_V_base(n0)
 
-    # 分布から k をサンプリング
+    # sampling topic
     # 新しいトピックの場合、パラメータの領域を確保
     def sampling_topic(self, p_k):
         drawing = numpy.random.multinomial(1, p_k / p_k.sum()).argmax()
@@ -168,7 +169,7 @@ class HDPLDA:
         return t_new
 
 
-    # 事後分布から t をサンプリング
+    # sampling t (table) from posterior
     def sampling_t(self, j, i):
         v = self.x_ji[j][i]
         tables = self.tables[j]
@@ -206,7 +207,7 @@ class HDPLDA:
         else:
             t_new = self.new_table(j, i, f_k)
 
-        # パラメータの更新
+        # update counters
         self.t_ji[j][i] = t_new
         self.n_jt[j][t_new] += 1
 
@@ -214,7 +215,7 @@ class HDPLDA:
         self.n_k[k_new] += 1
         self.n_kv[k_new, v] += 1
 
-    # 事後分布から k をサンプリング
+    # sampling k (dish=topic) from posterior
     def sampling_k(self, j, t):
         k_old = self.k_jt[j][t]
         self.m_k[k_old] -= 1
@@ -235,7 +236,7 @@ class HDPLDA:
         log_p_k[K] = self.log_f_k_new_x_jt_fast(j, t) + numpy.log(self.gamma)
         k_new = self.sampling_topic(numpy.exp(log_p_k - log_p_k.max()))
 
-        # パラメータの更新
+        # update counters
         self.k_jt[j][t] = k_new
         self.m_k[k_new] += 1
         self.n_k[k_new] += self.n_jt[j][t]
@@ -285,7 +286,7 @@ def hdplda_learning(hdplda, iteration):
     return hdplda
 
 def main():
-    parser = OptionParser()
+    parser = optparse.OptionParser()
     parser.add_option("-f", dest="filename", help="corpus filename")
     parser.add_option("-r", dest="reuters", help="corpus range of Reuters' files(start:end)")
     parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha", default=numpy.random.gamma(1, 1))
@@ -293,6 +294,7 @@ def main():
     parser.add_option("--base", dest="base", type="float", help="parameter of base measure H", default=0.5)
     parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=10)
     parser.add_option("-s", dest="stopwords", type="int", help="except stop words", default=1)
+    parser.add_option("--seed", dest="seed", type="int", help="random seed")
     (options, args) = parser.parse_args()
     if not (options.filename or options.reuters): parser.error("need corpus filename(-f) or Reuters range(-r)")
 
@@ -301,20 +303,18 @@ def main():
     else:
         corpus = vocabulary.load_reuters(options.reuters)
         if not corpus: parser.error("Reuters range(-r) forms 'start:end'")
+    if options.seed != None:
+        numpy.random.seed(options.seed)
 
     hdplda = HDPLDA( options.alpha, options.gamma, options.base )
     voca = hdplda.set_corpus(corpus, options.stopwords)
-    #hdplda.dump(True)
     print "corpus=%d words=%d alpha=%f gamma=%f base=%f" % (len(corpus), len(voca.vocas), options.alpha, options.gamma, options.base)
 
     #import cProfile
-    #numpy.random.seed(0) # for profiling
-    #cProfile.runctx('hdplda_learning(hdplda, options.iteration)', globals(), locals(), 'hdplda.profile.txt')
+    #cProfile.runctx('hdplda_learning(hdplda, options.iteration)', globals(), locals(), 'hdplda.profile')
     hdplda_learning(hdplda, options.iteration)
 
     phi = hdplda.worddist()
-    #for v, term in enumerate(voca):
-    #    print ','.join([term]+[str(x) for x in phi[:,v]])
     for k, phi_k in enumerate(phi):
         print "\n-- topic: %d" % k
         for w in numpy.argsort(-phi_k)[:20]:
