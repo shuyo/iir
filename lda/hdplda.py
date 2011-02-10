@@ -5,7 +5,6 @@
 # (c)2010-2011 Nakatani Shuyo / Cybozu Labs Inc.
 # (refer to "Hierarchical Dirichlet Processes"(Teh et.al, 2005))
 
-import sys
 import optparse
 import numpy
 import vocabulary
@@ -280,15 +279,15 @@ class HDPLDA:
 
 def hdplda_learning(hdplda, iteration):
     for i in range(iteration):
-        sys.stderr.write("-%d %f\n" % (i + 1, hdplda.perplexity()))
+        print "-%d K=%d p=%f" % (i + 1, len(hdplda.topics), hdplda.perplexity())
         hdplda.inference()
-    print hdplda.perplexity()
+    print "K=%d perplexity=%f" % (len(hdplda.topics), hdplda.perplexity())
     return hdplda
 
 def main():
     parser = optparse.OptionParser()
     parser.add_option("-f", dest="filename", help="corpus filename")
-    parser.add_option("-r", dest="reuters", help="corpus range of Reuters' files(start:end)")
+    parser.add_option("-c", dest="corpus", help="using range of Brown corpus' files(start:end)")
     parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha", default=numpy.random.gamma(1, 1))
     parser.add_option("--gamma", dest="gamma", type="float", help="parameter gamma", default=numpy.random.gamma(1, 1))
     parser.add_option("--base", dest="base", type="float", help="parameter of base measure H", default=0.5)
@@ -296,13 +295,13 @@ def main():
     parser.add_option("-s", dest="stopwords", type="int", help="except stop words", default=1)
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
     (options, args) = parser.parse_args()
-    if not (options.filename or options.reuters): parser.error("need corpus filename(-f) or Reuters range(-r)")
+    if not (options.filename or options.corpus): parser.error("need corpus filename(-f) or corpus range(-c)")
 
     if options.filename:
-        corpus = vocabulary.load_corpus(options.filename)
+        corpus = vocabulary.load_file(options.filename)
     else:
-        corpus = vocabulary.load_reuters(options.reuters)
-        if not corpus: parser.error("Reuters range(-r) forms 'start:end'")
+        corpus = vocabulary.load_corpus(options.corpus)
+        if not corpus: parser.error("corpus range(-c) forms 'start:end'")
     if options.seed != None:
         numpy.random.seed(options.seed)
 

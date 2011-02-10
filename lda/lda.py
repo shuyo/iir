@@ -76,14 +76,14 @@ class LDA:
 
 def lda_learning(lda, iteration):
     for i in range(iteration):
-        print "-%d %f" % (i + 1, lda.perplexity())
+        print "-%d p=%f" % (i + 1, lda.perplexity())
         lda.inference()
-    print lda.perplexity()
+    print "perplexity=%f" % lda.perplexity()
 
 def main():
     parser = optparse.OptionParser()
     parser.add_option("-f", dest="filename", help="corpus filename")
-    parser.add_option("-r", dest="reuters", help="corpus range of Reuters' files(start:end)")
+    parser.add_option("-c", dest="corpus", help="using range of Brown corpus' files(start:end)")
     parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha", default=0.5)
     parser.add_option("--beta", dest="beta", type="float", help="parameter beta", default=0.5)
     parser.add_option("-k", dest="K", type="int", help="number of topics", default=20)
@@ -91,13 +91,13 @@ def main():
     parser.add_option("-s", dest="stopwords", type="int", help="except stop words", default=1)
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
     (options, args) = parser.parse_args()
-    if not (options.filename or options.reuters): parser.error("need corpus filename(-f) or Reuters range(-r)")
+    if not (options.filename or options.corpus): parser.error("need corpus filename(-f) or corpus range(-c)")
 
     if options.filename:
-        corpus = vocabulary.load_corpus(options.filename)
+        corpus = vocabulary.load_file(options.filename)
     else:
-        corpus = vocabulary.load_reuters(options.reuters)
-        if not corpus: parser.error("Reuters range(-r) forms 'start:end'")
+        corpus = vocabulary.load_corpus(options.corpus)
+        if not corpus: parser.error("corpus range(-c) forms 'start:end'")
     if options.seed != None:
         numpy.random.seed(options.seed)
 

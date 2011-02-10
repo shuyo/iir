@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import nltk, re
 
-def load_reuters(range):
+def load_corpus(range):
     m = re.match(r'(\d+):(\d+)$', range)
     if m:
         start = int(m.group(1))
@@ -10,7 +10,7 @@ def load_reuters(range):
         from nltk.corpus import brown as corpus
         return [corpus.words(fileid) for fileid in corpus.fileids()[start:end]]
 
-def load_corpus(filename):
+def load_file(filename):
     corpus = []
     f = open(filename, 'r')
     for line in f:
@@ -46,6 +46,7 @@ class Vocabulary:
         for term in doc:
             id = self.term_to_id(term)
             if id: list.append(id)
+        if "close" in dir(doc): doc.close()
         return list
     def __getitem__(self, v):
         return self.vocas[v]
