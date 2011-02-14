@@ -16,7 +16,7 @@ class LDA:
 
     def set_corpus(self, corpus, stopwords):
         """set courpus and initialize"""
-        voca = vocabulary.Vocabulary(stopwords)
+        voca = vocabulary.Vocabulary(stopwords==0)
         self.docs = [voca.doc_to_ids(doc) for doc in corpus]
         self.n_m = numpy.array([len(doc) for doc in self.docs])
 
@@ -31,7 +31,10 @@ class LDA:
         self.N = 0
         for m, doc in enumerate(self.docs):
             self.N += len(doc)
-            z_n = numpy.random.randint(0, self.K, len(doc))
+            if stopwords==2:
+                z_n = numpy.array([0 if voca.is_stopword_id(w) else numpy.random.randint(1, self.K) for w in doc])
+            else:
+                z_n = numpy.random.randint(0, self.K, len(doc))
             self.z_m_n.append(z_n)
             for t, z in zip(doc, z_n):
                 self.n_m_z[m, z] += 1
@@ -88,7 +91,7 @@ def main():
     parser.add_option("--beta", dest="beta", type="float", help="parameter beta", default=0.5)
     parser.add_option("-k", dest="K", type="int", help="number of topics", default=20)
     parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=100)
-    parser.add_option("-s", dest="stopwords", type="int", help="except stop words", default=1)
+    parser.add_option("-s", dest="stopwords", type="int", help="0=exclude stop words, 1=include stop words, 2=stop words into one topic", default=1)
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
     (options, args) = parser.parse_args()
     if not (options.filename or options.corpus): parser.error("need corpus filename(-f) or corpus range(-c)")

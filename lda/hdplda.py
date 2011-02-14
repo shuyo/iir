@@ -30,7 +30,7 @@ class HDPLDA:
         self.topics = [0] # available id of topics
         self.n_terms = 0
 
-        voca = vocabulary.Vocabulary(stopwords)
+        voca = vocabulary.Vocabulary(stopwords==0)
 
         for doc in corpus:
             x_i = voca.doc_to_ids(doc)
@@ -292,7 +292,7 @@ def main():
     parser.add_option("--gamma", dest="gamma", type="float", help="parameter gamma", default=numpy.random.gamma(1, 1))
     parser.add_option("--base", dest="base", type="float", help="parameter of base measure H", default=0.5)
     parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=10)
-    parser.add_option("-s", dest="stopwords", type="int", help="except stop words", default=1)
+    parser.add_option("-s", dest="stopwords", type="int", help="0=exclude stop words, 1=include stop words", default=1)
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
     (options, args) = parser.parse_args()
     if not (options.filename or options.corpus): parser.error("need corpus filename(-f) or corpus range(-c)")
