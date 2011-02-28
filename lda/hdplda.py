@@ -20,39 +20,51 @@ class HDPLDA:
         self.log_base_cache = [numpy.log(self.base)]
         self.log_base_cache_len = 1
 
-    def set_corpus(self, corpus, stopwords):
+    def set_corpus(self, corpus, stopwords, K):
         self.x_ji = [] # vocabulary for each document and term
         self.t_ji = [] # table for each document and term
         self.k_jt = [] # topic for each document and table
         self.n_jt = [] # number of terms for each document and table
 
         self.tables = [] # available id of tables for each document
-        self.topics = [0] # available id of topics
         self.n_terms = 0
+        self.n_tables = 0
+
+        self.m_k = numpy.zeros(K, dtype=int) # number of tables for each topic
+        self.n_k = [0] * K  # number of terms for each topic
 
         voca = vocabulary.Vocabulary(stopwords==0)
 
-        for doc in corpus:
-            x_i = voca.doc_to_ids(doc)
-            self.x_ji.append(x_i)
-
+        docs = [voca.doc_to_ids(doc) for doc in corpus]
+        docs = voca.cut_low_freq(docs)
+        for x_i in docs:
             N = len(x_i)
-            self.k_jt.append([0])
-            self.n_jt.append(numpy.array([N]))
+            self.x_ji.append(x_i)
             self.n_terms += N
-            self.t_ji.append([0] * N)
-            self.tables.append([0])
+
+            self.k_jt.append(range(K))
+            t_i = numpy.random.randint(0, K, N)
+            self.t_ji.append(t_i)
+
+            n_t = numpy.zeros(K, dtype=int)
+            for t in t_i: n_t[t] += 1
+            self.n_jt.append(n_t)
+            for t, n in enumerate(n_t): self.n_k[t] += n
+
+            tables = [t for t, n in enumerate(n_t) if n > 0]
+            self.tables.append(tables)
+            self.n_tables += len(tables)
+            for t in tables: self.m_k[t] += 1
+
+        self.topics = [k for k, m in enumerate(self.m_k) if m > 0] # available id of topics
 
         self.V = voca.size()
-        self.n_kv = numpy.zeros((1, self.V), dtype=int) # number of terms for each topic and vocabulary
-        for x_i in self.x_ji:
-            for v in x_i:
-                self.n_kv[0, v] += 1
+        self.n_kv = numpy.zeros((K, self.V), dtype=int) # number of terms for each topic and vocabulary
+        for j, x_i in enumerate(self.x_ji):
+            for i, v in enumerate(x_i):
+                self.n_kv[self.t_ji[j][i], v] += 1
 
-        self.n_tables = len(corpus)
         self.updated_n_tables()
-        self.m_k = numpy.array([self.n_tables]) # number of tables for each topic
-        self.n_k = [self.n_terms]  # number of terms for each topic
 
         self.gamma_f_k_new_x_ji = self.gamma / self.V
         self.Vbase = self.V * self.base
@@ -291,6 +303,7 @@ def main():
     parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha", default=numpy.random.gamma(1, 1))
     parser.add_option("--gamma", dest="gamma", type="float", help="parameter gamma", default=numpy.random.gamma(1, 1))
     parser.add_option("--base", dest="base", type="float", help="parameter of base measure H", default=0.5)
+    parser.add_option("-k", dest="K", type="int", help="initial number of topics", default=1)
     parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=10)
     parser.add_option("-s", dest="stopwords", type="int", help="0=exclude stop words, 1=include stop words", default=1)
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
@@ -306,8 +319,9 @@ def main():
         numpy.random.seed(options.seed)
 
     hdplda = HDPLDA( options.alpha, options.gamma, options.base )
-    voca = hdplda.set_corpus(corpus, options.stopwords)
-    print "corpus=%d words=%d alpha=%f gamma=%f base=%f" % (len(corpus), len(voca.vocas), options.alpha, options.gamma, options.base)
+    voca = hdplda.set_corpus(corpus, options.stopwords, options.K)
+    print "corpus=%d words=%d alpha=%f gamma=%f base=%f initK=%d stopwords=%d" % (len(corpus), len(voca.vocas), options.alpha, options.gamma, options.base, options.K, options.stopwords)
+    #hdplda.dump()
 
     #import cProfile
     #cProfile.runctx('hdplda_learning(hdplda, options.iteration)', globals(), locals(), 'hdplda.profile')

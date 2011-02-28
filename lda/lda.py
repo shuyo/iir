@@ -15,10 +15,10 @@ class LDA:
         self.beta = beta   # parameter of words prior
 
     def set_corpus(self, corpus, stopwords):
-        """set courpus and initialize"""
+        """set corpus and initialize"""
         voca = vocabulary.Vocabulary(stopwords==0)
         self.docs = [voca.doc_to_ids(doc) for doc in corpus]
-        self.n_m = numpy.array([len(doc) for doc in self.docs])
+        self.docs = voca.cut_low_freq(self.docs)
 
         M = len(self.docs)
         self.V = voca.size()
@@ -107,6 +107,7 @@ def main():
     lda = LDA(options.K, options.alpha, options.beta)
     voca = lda.set_corpus(corpus, options.stopwords)
     print "corpus=%d, words=%d, K=%d, a=%f, b=%f" % (len(corpus), len(voca.vocas), options.K, options.alpha, options.beta)
+    #for id, word in enumerate(voca.vocas): print "%d\t%s\t%d\t%d" % (id, word, voca.docfreq[id], vocabulary.is_stopword(word))
 
     #import cProfile
     #cProfile.runctx('lda_learning(lda, options.iteration)', globals(), locals(), 'lda.profile')
