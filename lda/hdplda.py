@@ -16,9 +16,8 @@ class HDPLDA:
         self.gamma = gamma
 
         # cache of calculation
+        self.cur_log_base_cache = [0]
         self.cur_log_V_base_cache = [0]
-        self.log_base_cache = [numpy.log(self.base)]
-        self.log_base_cache_len = 1
 
     def set_corpus(self, corpus, stopwords, K):
         self.x_ji = [] # vocabulary for each document and term
@@ -86,49 +85,53 @@ class HDPLDA:
     def updated_n_tables(self):
         self.alpha_over_T_gamma = self.alpha / (self.n_tables + self.gamma)
 
+    def cur_log_base(self, n):
+        """cache of \sum_{i=0}^{n-1} numpy.log(i + self.base)"""
+        N = len(self.cur_log_base_cache)
+        if n < N: return self.cur_log_base_cache[n]
+        s = self.cur_log_base_cache[-1]
+        while N <= n:
+            s += numpy.log(N + self.base - 1)
+            self.cur_log_base_cache.append(s)
+            N += 1
+        return s
+
     def cur_log_V_base(self, n):
         """cache of \sum_{i=0}^{n-1} numpy.log(i + self.base * self.V)"""
         N = len(self.cur_log_V_base_cache)
         if n < N: return self.cur_log_V_base_cache[n]
         s = self.cur_log_V_base_cache[-1]
         while N <= n:
-            s += numpy.log(N + self.Vbase)
+            s += numpy.log(N + self.Vbase - 1)
             self.cur_log_V_base_cache.append(s)
             N += 1
         return s
-
-    def log_base(self, n):
-        """cache of numpy.log(n + self.base)"""
-        N = self.log_base_cache_len #len(self.log_base_cache)
-        if n < N: return self.log_base_cache[n]
-        while N <= n:
-            self.log_base_cache.append(numpy.log(N + self.base))
-            N += 1
-        self.log_base_cache_len= N
-        return self.log_base_cache[-1]
 
     # n_??/m_? を用いて f_k を高速に計算
     def f_k_x_ji_fast(self, k, v):
         return (self.n_kv[k, v] + self.base) / (self.n_k[k] + self.Vbase)
 
-    def log_f_k_x_jt_fast(self, k, j, t):
-        return self.log_f_k_new_x_jt_fast(j, t, self.n_kv[k, :].copy(), self.n_k[k])
+    def log_f_k_new_x_jt_fast2(self, n_jt, n_tv, n_kv = None, n_k = 0):
+        p = self.cur_log_V_base(n_k) - self.cur_log_V_base(n_k + n_jt)
+        for (v_l, n_l) in n_tv:
+            n0 = n_kv[v_l] if n_kv != None else 0
+            p += self.cur_log_base(n0 + n_l) - self.cur_log_base(n0)
+        return p
 
-    # 浮動小数の範囲を超えて非常に小さい値になることがあるので、対数を返す
-    def log_f_k_new_x_jt_fast(self, j, target_t, n_v = None, n = 0):
-        if n_v == None:
-            n_v = numpy.zeros(self.V, dtype=int)
-        p = 0.0
+    def count_n_jtv(self, j, t):
         x_i = self.x_ji[j]
         t_i = self.t_ji[j]
-        n0 = n
-        for i, t in enumerate(t_i):
-            if t == target_t:
+        n_jtv = dict()
+        n_jt = 0
+        for i, t1 in enumerate(t_i):
+            if t1 == t:
                 v = x_i[i]
-                p += self.log_base(n_v[v]) # numpy.log(n_v[v] + self.base) - numpy.log(n + self.base * self.V)
-                n_v[v] += 1
-                n += 1
-        return p - self.cur_log_V_base(n) + self.cur_log_V_base(n0)
+                if v in n_jtv:
+                    n_jtv[v] += 1
+                else:
+                    n_jtv[v] = 1
+                n_jt += 1
+        return (n_jt, n_jtv.items())
 
     # sampling topic
     # 新しいトピックの場合、パラメータの領域を確保
@@ -148,7 +151,7 @@ class HDPLDA:
                 self.n_k.append(0)
                 self.m_k = numpy.resize(self.m_k, K + 1)
                 self.m_k[k_new] = 0
-                self.n_kv = numpy.resize(self.n_kv, (k_new+1, self.V)) # self.n_kv.append(dict())
+                self.n_kv = numpy.resize(self.n_kv, (k_new+1, self.V))
                 self.n_kv[k_new, :] = numpy.zeros(self.V, dtype=int)
             self.topics.append(k_new)
         return k_new
@@ -240,11 +243,12 @@ class HDPLDA:
 
         # sampling of k
         # 確率が小さくなりすぎるので log で保持。最大値を引いてからexp&正規化
+        n_jt, n_jtv = self.count_n_jtv(j, t)
         K = len(self.topics)
         log_p_k = numpy.zeros(K+1)
         for i, k in enumerate(self.topics):
-            log_p_k[i] = self.log_f_k_x_jt_fast(k, j, t) + numpy.log(self.m_k[k])
-        log_p_k[K] = self.log_f_k_new_x_jt_fast(j, t) + numpy.log(self.gamma)
+            log_p_k[i] = self.log_f_k_new_x_jt_fast2(n_jt, n_jtv, self.n_kv[k, :], self.n_k[k]) + numpy.log(self.m_k[k])
+        log_p_k[K] = self.log_f_k_new_x_jt_fast2(n_jt, n_jtv) + numpy.log(self.gamma)
         k_new = self.sampling_topic(numpy.exp(log_p_k - log_p_k.max()))
 
         # update counters
@@ -309,23 +313,24 @@ def main():
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
     (options, args) = parser.parse_args()
     if not (options.filename or options.corpus): parser.error("need corpus filename(-f) or corpus range(-c)")
+    if options.seed != None:
+        numpy.random.seed(options.seed)
+        print "seed = ", options.seed
 
     if options.filename:
         corpus = vocabulary.load_file(options.filename)
     else:
         corpus = vocabulary.load_corpus(options.corpus)
         if not corpus: parser.error("corpus range(-c) forms 'start:end'")
-    if options.seed != None:
-        numpy.random.seed(options.seed)
 
     hdplda = HDPLDA( options.alpha, options.gamma, options.base )
     voca = hdplda.set_corpus(corpus, options.stopwords, options.K)
     print "corpus=%d words=%d alpha=%f gamma=%f base=%f initK=%d stopwords=%d" % (len(corpus), len(voca.vocas), options.alpha, options.gamma, options.base, options.K, options.stopwords)
     #hdplda.dump()
 
-    #import cProfile
-    #cProfile.runctx('hdplda_learning(hdplda, options.iteration)', globals(), locals(), 'hdplda.profile')
-    hdplda_learning(hdplda, options.iteration)
+    import cProfile
+    cProfile.runctx('hdplda_learning(hdplda, options.iteration)', globals(), locals(), 'hdplda.profile')
+    #hdplda_learning(hdplda, options.iteration)
 
     phi = hdplda.worddist()
     for k, phi_k in enumerate(phi):
