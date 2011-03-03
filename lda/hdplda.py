@@ -301,6 +301,7 @@ def main():
     parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=10)
     parser.add_option("-s", dest="stopwords", type="int", help="0=exclude stop words, 1=include stop words", default=1)
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
+    parser.add_option("--df", dest="df", type="int", help="threshold of document freaquency to cut words", default=0)
     (options, args) = parser.parse_args()
     if not (options.filename or options.corpus): parser.error("need corpus filename(-f) or corpus range(-c)")
     if options.seed != None:
@@ -315,7 +316,7 @@ def main():
 
     voca = vocabulary.Vocabulary(options.stopwords==0)
     docs = [voca.doc_to_ids(doc) for doc in corpus]
-    docs = voca.cut_low_freq(docs)
+    if options.df > 0: docs = voca.cut_low_freq(docs, options.df)
 
     hdplda = HDPLDA(options.K, options.alpha, options.gamma, options.base, docs, voca.size())
     print "corpus=%d words=%d alpha=%f gamma=%f base=%f initK=%d stopwords=%d" % (len(corpus), len(voca.vocas), options.alpha, options.gamma, options.base, options.K, options.stopwords)

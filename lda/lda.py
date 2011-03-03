@@ -4,43 +4,33 @@
 # Latent Dirichlet Allocation + collapsed Gibbs sampling
 # (c)2010-2011 Nakatani Shuyo / Cybozu Labs Inc.
 
-import optparse
 import numpy
-import vocabulary
 
 class LDA:
-    def __init__(self, K, alpha, beta):
+    def __init__(self, K, alpha, beta, docs, V, is_stopword_id=None):
         self.K = K
         self.alpha = alpha # parameter of topics prior
         self.beta = beta   # parameter of words prior
-
-    def set_corpus(self, corpus, stopwords):
-        """set corpus and initialize"""
-        voca = vocabulary.Vocabulary(stopwords==0)
-        self.docs = [voca.doc_to_ids(doc) for doc in corpus]
-        self.docs = voca.cut_low_freq(self.docs)
-
-        M = len(self.docs)
-        self.V = voca.size()
+        self.docs = docs
+        self.V = V
 
         self.z_m_n = [] # topics of words of documents
-        self.n_m_z = numpy.zeros((M, self.K)) + self.alpha     # word count of each document and topic
-        self.n_z_t = numpy.zeros((self.K, self.V)) + self.beta # word count of each topic and vocabulary
-        self.n_z = numpy.zeros(self.K) + self.V * self.beta    # word count of each topic
+        self.n_m_z = numpy.zeros((len(self.docs), K)) + alpha     # word count of each document and topic
+        self.n_z_t = numpy.zeros((K, V)) + beta # word count of each topic and vocabulary
+        self.n_z = numpy.zeros(K) + V * beta    # word count of each topic
 
         self.N = 0
-        for m, doc in enumerate(self.docs):
+        for m, doc in enumerate(docs):
             self.N += len(doc)
-            if stopwords==2:
-                z_n = numpy.array([0 if voca.is_stopword_id(w) else numpy.random.randint(1, self.K) for w in doc])
+            if is_stopword_id!=None:
+                z_n = numpy.array([0 if is_stopword_id(w) else numpy.random.randint(1, K) for w in doc])
             else:
-                z_n = numpy.random.randint(0, self.K, len(doc))
+                z_n = numpy.random.randint(0, K, len(doc))
             self.z_m_n.append(z_n)
             for t, z in zip(doc, z_n):
                 self.n_m_z[m, z] += 1
                 self.n_z_t[z, t] += 1
                 self.n_z[z] += 1
-        return voca
 
     def inference(self):
         """learning once iteration"""
@@ -84,6 +74,8 @@ def lda_learning(lda, iteration):
     print "perplexity=%f" % lda.perplexity()
 
 def main():
+    import optparse
+    import vocabulary
     parser = optparse.OptionParser()
     parser.add_option("-f", dest="filename", help="corpus filename")
     parser.add_option("-c", dest="corpus", help="using range of Brown corpus' files(start:end)")
@@ -93,6 +85,7 @@ def main():
     parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=100)
     parser.add_option("-s", dest="stopwords", type="int", help="0=exclude stop words, 1=include stop words, 2=stop words into one topic", default=1)
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
+    parser.add_option("--df", dest="df", type="int", help="threshold of document freaquency to cut words", default=0)
     (options, args) = parser.parse_args()
     if not (options.filename or options.corpus): parser.error("need corpus filename(-f) or corpus range(-c)")
 
@@ -104,10 +97,13 @@ def main():
     if options.seed != None:
         numpy.random.seed(options.seed)
 
-    lda = LDA(options.K, options.alpha, options.beta)
-    voca = lda.set_corpus(corpus, options.stopwords)
+    voca = vocabulary.Vocabulary(options.stopwords==0)
+    docs = [voca.doc_to_ids(doc) for doc in corpus]
+    if options.df > 0: docs = voca.cut_low_freq(docs, options.df)
+
+    is_stopword_id = voca.is_stopword_id if options.stopwords == 2 else None
+    lda = LDA(options.K, options.alpha, options.beta, docs, voca.size(), is_stopword_id)
     print "corpus=%d, words=%d, K=%d, a=%f, b=%f" % (len(corpus), len(voca.vocas), options.K, options.alpha, options.beta)
-    #for id, word in enumerate(voca.vocas): print "%d\t%s\t%d\t%d" % (id, word, voca.docfreq[id], vocabulary.is_stopword(word))
 
     #import cProfile
     #cProfile.runctx('lda_learning(lda, options.iteration)', globals(), locals(), 'lda.profile')
