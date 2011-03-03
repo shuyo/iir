@@ -5,70 +5,57 @@
 # (c)2010-2011 Nakatani Shuyo / Cybozu Labs Inc.
 # (refer to "Hierarchical Dirichlet Processes"(Teh et.al, 2005))
 
-import optparse
 import numpy
-import vocabulary
 
 class HDPLDA:
-    def __init__(self, alpha, gamma, base):
+    def __init__(self, K, alpha, gamma, base, docs, V):
         self.alpha = alpha
         self.base = base
         self.gamma = gamma
+        self.V = V
 
-        # cache of calculation
-        self.cur_log_base_cache = [0]
-        self.cur_log_V_base_cache = [0]
-
-    def set_corpus(self, corpus, stopwords, K):
-        self.x_ji = [] # vocabulary for each document and term
+        self.x_ji = docs # vocabulary for each document and term
         self.t_ji = [] # table for each document and term
         self.k_jt = [] # topic for each document and table
         self.n_jt = [] # number of terms for each document and table
 
         self.tables = [] # available id of tables for each document
-        self.n_terms = 0
         self.n_tables = 0
 
         self.m_k = numpy.zeros(K, dtype=int)  # number of tables for each topic
         self.n_k = numpy.zeros(K, dtype=int)  # number of terms for each topic
+        self.n_kv = numpy.zeros((K, V), dtype=int) # number of terms for each topic and vocabulary
 
-        voca = vocabulary.Vocabulary(stopwords==0)
-
-        docs = [voca.doc_to_ids(doc) for doc in corpus]
-        docs = voca.cut_low_freq(docs)
         for x_i in docs:
-            N = len(x_i)
-            self.x_ji.append(x_i)
-            self.n_terms += N
-
             self.k_jt.append(range(K))
-            t_i = numpy.random.randint(0, K, N)
+            t_i = numpy.random.randint(0, K, len(x_i))
             self.t_ji.append(t_i)
 
             n_t = numpy.zeros(K, dtype=int)
-            for t in t_i: n_t[t] += 1
             self.n_jt.append(n_t)
-            for t, n in enumerate(n_t): self.n_k[t] += n
+            for t, v in zip(t_i, x_i):
+                self.n_kv[t, v] += 1
+                n_t[t] += 1
 
-            tables = [t for t, n in enumerate(n_t) if n > 0]
+            tables = []
+            for t, n in enumerate(n_t):
+                self.n_k[t] += n
+                if n > 0:
+                    self.m_k[t] += 1
+                    tables.append(t)
+
             self.tables.append(tables)
             self.n_tables += len(tables)
-            for t in tables: self.m_k[t] += 1
 
         self.topics = [k for k, m in enumerate(self.m_k) if m > 0] # available id of topics
 
-        self.V = voca.size()
-        self.n_kv = numpy.zeros((K, self.V), dtype=int) # number of terms for each topic and vocabulary
-        for j, x_i in enumerate(self.x_ji):
-            for i, v in enumerate(x_i):
-                self.n_kv[self.t_ji[j][i], v] += 1
-
+        # memoization
         self.updated_n_tables()
+        self.Vbase = V * base
+        self.gamma_f_k_new_x_ji = gamma / V
+        self.cur_log_base_cache = [0]
+        self.cur_log_V_base_cache = [0]
 
-        self.gamma_f_k_new_x_ji = self.gamma / self.V
-        self.Vbase = self.V * self.base
-
-        return voca
 
     def inference(self):
         for j, x_i in enumerate(self.x_ji):
@@ -303,6 +290,7 @@ def hdplda_learning(hdplda, iteration):
     return hdplda
 
 def main():
+    import optparse
     parser = optparse.OptionParser()
     parser.add_option("-f", dest="filename", help="corpus filename")
     parser.add_option("-c", dest="corpus", help="using range of Brown corpus' files(start:end)")
@@ -318,14 +306,18 @@ def main():
     if options.seed != None:
         numpy.random.seed(options.seed)
 
+    import vocabulary
     if options.filename:
         corpus = vocabulary.load_file(options.filename)
     else:
         corpus = vocabulary.load_corpus(options.corpus)
         if not corpus: parser.error("corpus range(-c) forms 'start:end'")
 
-    hdplda = HDPLDA( options.alpha, options.gamma, options.base )
-    voca = hdplda.set_corpus(corpus, options.stopwords, options.K)
+    voca = vocabulary.Vocabulary(options.stopwords==0)
+    docs = [voca.doc_to_ids(doc) for doc in corpus]
+    docs = voca.cut_low_freq(docs)
+
+    hdplda = HDPLDA(options.K, options.alpha, options.gamma, options.base, docs, voca.size())
     print "corpus=%d words=%d alpha=%f gamma=%f base=%f initK=%d stopwords=%d" % (len(corpus), len(voca.vocas), options.alpha, options.gamma, options.base, options.K, options.stopwords)
     #hdplda.dump()
 
