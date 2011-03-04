@@ -23,33 +23,41 @@ class LDA:
         for m, doc in enumerate(docs):
             self.N += len(doc)
             if is_stopword_id!=None:
-                z_n = numpy.array([0 if is_stopword_id(w) else numpy.random.randint(1, K) for w in doc])
+                z_n = [0 if is_stopword_id(t) else numpy.random.randint(1, K) for t in doc]
+                for t, z in zip(doc, z_n):
+                    self.n_m_z[m, z] += 1
+                    self.n_z_t[z, t] += 1
+                    self.n_z[z] += 1
             else:
-                z_n = numpy.random.randint(0, K, len(doc))
-            self.z_m_n.append(z_n)
-            for t, z in zip(doc, z_n):
-                self.n_m_z[m, z] += 1
-                self.n_z_t[z, t] += 1
-                self.n_z[z] += 1
+                z_n = []
+                for t in doc:
+                    p_z = self.n_z_t[:, t] * self.n_m_z[m] / self.n_z
+                    z = numpy.random.multinomial(1, p_z / p_z.sum()).argmax()
+                    z_n.append(z)
+                    self.n_m_z[m, z] += 1
+                    self.n_z_t[z, t] += 1
+                    self.n_z[z] += 1
+            self.z_m_n.append(numpy.array(z_n))
 
     def inference(self):
         """learning once iteration"""
         for m, doc in enumerate(self.docs):
             z_n = self.z_m_n[m]
+            n_m_z = self.n_m_z[m]
             for n, t in enumerate(doc):
                 # discount for n-th word t with topic z
                 z = z_n[n]
-                self.n_m_z[m, z] -= 1
+                n_m_z[z] -= 1
                 self.n_z_t[z, t] -= 1
                 self.n_z[z] -= 1
 
                 # sampling topic new_z for t
-                p_z = self.n_z_t[:, t] * self.n_m_z[m] / self.n_z
+                p_z = self.n_z_t[:, t] * n_m_z / self.n_z
                 new_z = numpy.random.multinomial(1, p_z / p_z.sum()).argmax()
 
                 # set z the new topic and increment counters
                 z_n[n] = new_z
-                self.n_m_z[m, new_z] += 1
+                n_m_z[new_z] += 1
                 self.n_z_t[new_z, t] += 1
                 self.n_z[new_z] += 1
 
@@ -62,7 +70,7 @@ class LDA:
         log_per = 0
         Kalpha = self.K * self.alpha
         for m, doc in enumerate(self.docs):
-            theta = self.n_m_z[m,:] / (len(doc) + Kalpha)
+            theta = self.n_m_z[m] / (len(doc) + Kalpha)
             for w in doc:
                 log_per -= numpy.log(numpy.inner(phi[:,w], theta))
         return numpy.exp(log_per / self.N)
@@ -112,7 +120,7 @@ def main():
     phi = lda.worddist()
     for k in range(options.K):
         print "\n-- topic: %d" % k
-        for w in numpy.argsort(-phi[k,:])[:20]:
+        for w in numpy.argsort(-phi[k])[:20]:
             print "%s: %f" % (voca[w], phi[k,w])
 
 if __name__ == "__main__":
