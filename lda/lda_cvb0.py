@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Latent Dirichlet Allocation + Collapsed Variational Bayes
+# Latent Dirichlet Allocation + Collapsed Variational Bayesian
 # (c)2010-2011 Nakatani Shuyo / Cybozu Labs Inc.
 
 import numpy
@@ -11,42 +11,68 @@ class LDA_CVB0:
         self.K = K
         self.alpha = alpha # parameter of topics prior
         self.beta = beta   # parameter of words prior
-        self.docs = docs
         self.V = V
 
+        self.docs = []
         self.gamma_jik = []
         self.n_wk = numpy.zeros((self.V, self.K)) + beta
-        self.n_jk = numpy.zeros((len(self.docs), self.K)) + alpha
+        self.n_jk = numpy.zeros((len(docs), self.K)) + alpha
         self.n_k = numpy.zeros(self.K) + V * beta
         self.N = 0
         for j, doc in enumerate(docs):
             N = len(doc)
             self.N += N
-
-            # sample from Dirichlet(alpha) for every words
-            gamma_ik = numpy.random.gamma(beta, 1, N * K).reshape(K, N)
-            gamma_ik = (gamma_ik / gamma_ik.sum(axis=0)).transpose()
-            self.gamma_jik.append(gamma_ik)
-
-            for w, gamma_k in zip(doc, gamma_ik):
+            gamma_ik = []
+            term_freq = dict()
+            term_gamma = dict()
+            for i, w in enumerate(doc):
+                gamma_k = numpy.random.mtrand.dirichlet(self.n_wk[w] * self.n_jk[j] / self.n_k)
+                if not numpy.isfinite(gamma_k[0]):
+                    gamma_k = numpy.random.mtrand.dirichlet([alpha] * K)
+                if w in term_freq:
+                    term_freq[w] += 1
+                    term_gamma[w] += gamma_k
+                else:
+                    term_freq[w] = 1
+                    term_gamma[w] = gamma_k
                 self.n_wk[w] += gamma_k
                 self.n_jk[j] += gamma_k
                 self.n_k += gamma_k
+            x = term_freq.items()
+            self.docs.append(x)
+            self.gamma_jik.append([term_gamma[w] / freq for w, freq in x])
 
     def inference(self):
         """learning once iteration"""
+        new_gamma_jik = []
+        new_n_wk = numpy.zeros((self.V, self.K)) + self.beta
+        new_n_jk = numpy.zeros((len(self.docs), self.K)) + self.alpha
+        new_n_k = numpy.zeros(self.K) + self.V * self.beta
         for j, doc in enumerate(self.docs):
-            for i, w in enumerate(doc):
+            new_gamma_ik = []
+            for i, x in enumerate(doc):
+                w, freq = x
                 gamma_k = self.gamma_jik[j][i]
                 self.n_wk[w] -= gamma_k
                 self.n_jk[j] -= gamma_k
                 self.n_k -= gamma_k
                 new_gamma_k = self.n_wk[w] * self.n_jk[j] / self.n_k
                 new_gamma_k /= new_gamma_k.sum()
-                self.gamma_jik[j][i] = new_gamma_k
-                self.n_wk[w] += new_gamma_k
-                self.n_jk[j] += new_gamma_k
-                self.n_k += new_gamma_k
+                self.n_wk[w] += gamma_k
+                self.n_jk[j] += gamma_k
+                self.n_k += gamma_k
+
+                new_gamma_ik.append(new_gamma_k)
+                gamma_freq = new_gamma_k * freq
+                new_n_wk[w] += gamma_freq
+                new_n_jk[j] += gamma_freq
+                new_n_k += gamma_freq
+
+            new_gamma_jik.append(new_gamma_ik)
+        self.gamma_jik = new_gamma_jik
+        self.n_wk = new_n_wk
+        self.n_jk = new_n_jk
+        self.n_k  = new_n_k
 
     def worddist(self):
         """get topic-word distribution"""
@@ -58,15 +84,24 @@ class LDA_CVB0:
         for j, doc in enumerate(self.docs):
             theta = self.n_jk[j].copy()
             theta /= theta.sum()
-            for w in doc:
-                log_per -= numpy.log(numpy.inner(phi[w], theta))
+            for w, freq in doc:
+                log_per -= numpy.log(numpy.inner(phi[w], theta)) * freq
         return numpy.exp(log_per / self.N)
 
-def lda_learning(lda, iteration):
+
+def lda_learning(lda, iteration, voca):
     for i in range(iteration):
         print "-%d p=%f" % (i + 1, lda.perplexity())
         lda.inference()
+        #if i % 10==0: output_word_topic_dist(lda, voca)
     print "perplexity=%f" % lda.perplexity()
+
+def output_word_topic_dist(lda, voca):
+    phi = lda.worddist()
+    for k in range(lda.K):
+        print "\n-- topic: %d" % k
+        for w in numpy.argsort(-phi[:,k])[:20]:
+            print "%s: %f" % (voca[w], phi[w,k])
 
 def main():
     import optparse
@@ -101,13 +136,8 @@ def main():
 
     #import cProfile
     #cProfile.runctx('lda_learning(lda, options.iteration)', globals(), locals(), 'lda.profile')
-    lda_learning(lda, options.iteration)
-
-    phi = lda.worddist()
-    for k in range(options.K):
-        print "\n-- topic: %d" % k
-        for w in numpy.argsort(-phi[:,k])[:20]:
-            print "%s: %f" % (voca[w], phi[w,k])
+    lda_learning(lda, options.iteration, voca)
+    output_word_topic_dist(lda, voca)
 
 if __name__ == "__main__":
     main()
