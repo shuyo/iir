@@ -20,14 +20,12 @@ class LDA_CVB0:
         self.n_k = numpy.zeros(K) + V * beta
         self.N = 0
         for j, doc in enumerate(docs):
-            N = len(doc)
-            self.N += N
-            gamma_ik = []
+            self.N += len(doc)
             term_freq = dict()
             term_gamma = dict()
             for i, w in enumerate(doc):
                 gamma_k = numpy.random.mtrand.dirichlet(self.n_wk[w] * self.n_jk[j] / self.n_k)
-                if not numpy.isfinite(gamma_k[0]):
+                if not numpy.isfinite(gamma_k[0]): # maybe NaN or Inf
                     gamma_k = numpy.random.mtrand.dirichlet([alpha] * K)
                 if w in term_freq:
                     term_freq[w] += 1
@@ -38,9 +36,9 @@ class LDA_CVB0:
                 self.n_wk[w] += gamma_k
                 self.n_jk[j] += gamma_k
                 self.n_k += gamma_k
-            x = term_freq.items()
-            self.docs.append(x)
-            self.gamma_jik.append([term_gamma[w] / freq for w, freq in x])
+            term_freq = term_freq.items()
+            self.docs.append(term_freq)
+            self.gamma_jik.append([term_gamma[w] / freq for w, freq in term_freq])
 
     def inference(self):
         """learning once iteration"""
