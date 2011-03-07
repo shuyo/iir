@@ -9,15 +9,15 @@ import numpy
 class LDA_CVB0:
     def __init__(self, K, alpha, beta, docs, V):
         self.K = K
-        self.alpha = alpha # parameter of topics prior
-        self.beta = beta   # parameter of words prior
+        self.alpha = alpha
+        self.beta = beta
         self.V = V
 
         self.docs = []
         self.gamma_jik = []
-        self.n_wk = numpy.zeros((self.V, self.K)) + beta
-        self.n_jk = numpy.zeros((len(docs), self.K)) + alpha
-        self.n_k = numpy.zeros(self.K) + V * beta
+        self.n_wk = numpy.zeros((V, K)) + beta
+        self.n_jk = numpy.zeros((len(docs), K)) + alpha
+        self.n_k = numpy.zeros(K) + V * beta
         self.N = 0
         for j, doc in enumerate(docs):
             N = len(doc)
@@ -44,35 +44,26 @@ class LDA_CVB0:
 
     def inference(self):
         """learning once iteration"""
-        new_gamma_jik = []
         new_n_wk = numpy.zeros((self.V, self.K)) + self.beta
         new_n_jk = numpy.zeros((len(self.docs), self.K)) + self.alpha
-        new_n_k = numpy.zeros(self.K) + self.V * self.beta
+        n_k = self.n_k
         for j, doc in enumerate(self.docs):
-            new_gamma_ik = []
-            for i, x in enumerate(doc):
-                w, freq = x
-                gamma_k = self.gamma_jik[j][i]
-                self.n_wk[w] -= gamma_k
-                self.n_jk[j] -= gamma_k
-                self.n_k -= gamma_k
-                new_gamma_k = self.n_wk[w] * self.n_jk[j] / self.n_k
+            gamma_ik = self.gamma_jik[j]
+            n_jk = self.n_jk[j]
+            new_n_jk_j = new_n_jk[j]
+            for i, gamma_k in enumerate(gamma_ik):
+                w, freq = doc[i]
+                new_gamma_k = (self.n_wk[w] - gamma_k) * (n_jk - gamma_k) / (n_k - gamma_k)
                 new_gamma_k /= new_gamma_k.sum()
-                self.n_wk[w] += gamma_k
-                self.n_jk[j] += gamma_k
-                self.n_k += gamma_k
 
-                new_gamma_ik.append(new_gamma_k)
+                gamma_ik[i] = new_gamma_k
                 gamma_freq = new_gamma_k * freq
                 new_n_wk[w] += gamma_freq
-                new_n_jk[j] += gamma_freq
-                new_n_k += gamma_freq
+                new_n_jk_j += gamma_freq
 
-            new_gamma_jik.append(new_gamma_ik)
-        self.gamma_jik = new_gamma_jik
         self.n_wk = new_n_wk
         self.n_jk = new_n_jk
-        self.n_k  = new_n_k
+        self.n_k  = new_n_wk.sum(axis=0)
 
     def worddist(self):
         """get topic-word distribution"""
@@ -82,8 +73,8 @@ class LDA_CVB0:
         phi = self.worddist()
         log_per = 0
         for j, doc in enumerate(self.docs):
-            theta = self.n_jk[j].copy()
-            theta /= theta.sum()
+            theta = self.n_jk[j]
+            theta = theta / theta.sum()
             for w, freq in doc:
                 log_per -= numpy.log(numpy.inner(phi[w], theta)) * freq
         return numpy.exp(log_per / self.N)
