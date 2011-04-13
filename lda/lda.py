@@ -7,7 +7,7 @@
 import numpy
 
 class LDA:
-    def __init__(self, K, alpha, beta, docs, V, smart_init=True):
+    def __init__(self, K, alpha, beta, docs, V, smartinit=True):
         self.K = K
         self.alpha = alpha # parameter of topics prior
         self.beta = beta   # parameter of words prior
@@ -25,7 +25,7 @@ class LDA:
             z_n = []
             for t in doc:
                 p_z = self.n_z_t[:, t] * self.n_m_z[m] / self.n_z
-                if smart_init:
+                if smartinit:
                     z = numpy.random.multinomial(1, p_z / p_z.sum()).argmax()
                 else:
                     z = numpy.random.randint(0, K)
@@ -78,9 +78,12 @@ def lda_learning(lda, iteration, voca):
         lda.inference()
         perp = lda.perplexity()
         print "-%d p=%f" % (i + 1, perp)
-        if pre_perp and pre_perp < perp:
-            output_word_topic_dist(lda, voca)
-            pre_perp = None
+        if pre_perp:
+            if pre_perp < perp:
+                output_word_topic_dist(lda, voca)
+                pre_perp = None
+            else:
+                pre_perp = perp
     output_word_topic_dist(lda, voca)
 
 def output_word_topic_dist(lda, voca):

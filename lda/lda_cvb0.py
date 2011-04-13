@@ -7,7 +7,7 @@
 import numpy
 
 class LDA_CVB0:
-    def __init__(self, K, alpha, beta, docs, V, smart_init=True):
+    def __init__(self, K, alpha, beta, docs, V, smartinit=True):
         self.K = K
         self.alpha = alpha
         self.beta = beta
@@ -24,8 +24,11 @@ class LDA_CVB0:
             term_freq = dict()
             term_gamma = dict()
             for i, w in enumerate(doc):
-                #gamma_k = [float("nan")]
-                gamma_k = numpy.random.mtrand.dirichlet(self.n_wk[w] * self.n_jk[j] / self.n_k)
+                if smartinit:
+                    p_k = self.n_wk[w] * self.n_jk[j] / self.n_k
+                    gamma_k = numpy.random.mtrand.dirichlet(p_k / p_k.sum() * alpha)
+                else:
+                    gamma_k = [float("nan")]
                 if not numpy.isfinite(gamma_k[0]): # maybe NaN or Inf
                     gamma_k = numpy.random.mtrand.dirichlet([alpha] * K)
                 if w in term_freq:
@@ -85,9 +88,12 @@ def lda_learning(lda, iteration, voca):
         lda.inference()
         perp = lda.perplexity()
         print "-%d p=%f" % (i + 1, perp)
-        if pre_perp and pre_perp < perp:
-            output_word_topic_dist(lda, voca)
-            pre_perp = None
+        if pre_perp:
+            if pre_perp < perp:
+                output_word_topic_dist(lda, voca)
+                pre_perp = None
+            else:
+                pre_perp = perp
     output_word_topic_dist(lda, voca)
 
 def output_word_topic_dist(lda, voca):
@@ -126,7 +132,7 @@ def main():
     docs = [voca.doc_to_ids(doc) for doc in corpus]
     if options.df > 0: docs = voca.cut_low_freq(docs, options.df)
 
-    lda = LDA_CVB0(options.K, options.alpha, options.beta, docs, voca.size())
+    lda = LDA_CVB0(options.K, options.alpha, options.beta, docs, voca.size(), options.smartinit)
     print "corpus=%d, words=%d, K=%d, a=%f, b=%f" % (len(corpus), len(voca.vocas), options.K, options.alpha, options.beta)
 
     #import cProfile
