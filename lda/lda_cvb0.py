@@ -7,7 +7,7 @@
 import numpy
 
 class LDA_CVB0:
-    def __init__(self, K, alpha, beta, docs, V):
+    def __init__(self, K, alpha, beta, docs, V, smart_init=True):
         self.K = K
         self.alpha = alpha
         self.beta = beta
@@ -24,6 +24,7 @@ class LDA_CVB0:
             term_freq = dict()
             term_gamma = dict()
             for i, w in enumerate(doc):
+                #gamma_k = [float("nan")]
                 gamma_k = numpy.random.mtrand.dirichlet(self.n_wk[w] * self.n_jk[j] / self.n_k)
                 if not numpy.isfinite(gamma_k[0]): # maybe NaN or Inf
                     gamma_k = numpy.random.mtrand.dirichlet([alpha] * K)
@@ -77,13 +78,17 @@ class LDA_CVB0:
                 log_per -= numpy.log(numpy.inner(phi[w], theta)) * freq
         return numpy.exp(log_per / self.N)
 
-
 def lda_learning(lda, iteration, voca):
+    pre_perp = lda.perplexity()
+    print "initial perplexity=%f" % pre_perp
     for i in range(iteration):
-        print "-%d p=%f" % (i + 1, lda.perplexity())
         lda.inference()
-        #if i % 10==0: output_word_topic_dist(lda, voca)
-    print "perplexity=%f" % lda.perplexity()
+        perp = lda.perplexity()
+        print "-%d p=%f" % (i + 1, perp)
+        if pre_perp and pre_perp < perp:
+            output_word_topic_dist(lda, voca)
+            pre_perp = None
+    output_word_topic_dist(lda, voca)
 
 def output_word_topic_dist(lda, voca):
     phi = lda.worddist()
@@ -102,7 +107,8 @@ def main():
     parser.add_option("--beta", dest="beta", type="float", help="parameter beta", default=0.5)
     parser.add_option("-k", dest="K", type="int", help="number of topics", default=20)
     parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=100)
-    parser.add_option("-s", dest="stopwords", type="int", help="0=exclude stop words, 1=include stop words, 2=stop words into one topic", default=1)
+    parser.add_option("-s", dest="smartinit", action="store_true", help="smart initialize of parameters", default=False)
+    parser.add_option("--stopwords", dest="stopwords", help="exclude stop words", action="store_true", default=False)
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
     parser.add_option("--df", dest="df", type="int", help="threshold of document freaquency to cut words", default=0)
     (options, args) = parser.parse_args()
@@ -116,7 +122,7 @@ def main():
     if options.seed != None:
         numpy.random.seed(options.seed)
 
-    voca = vocabulary.Vocabulary(options.stopwords==0)
+    voca = vocabulary.Vocabulary(options.stopwords)
     docs = [voca.doc_to_ids(doc) for doc in corpus]
     if options.df > 0: docs = voca.cut_low_freq(docs, options.df)
 
@@ -124,9 +130,8 @@ def main():
     print "corpus=%d, words=%d, K=%d, a=%f, b=%f" % (len(corpus), len(voca.vocas), options.K, options.alpha, options.beta)
 
     #import cProfile
-    #cProfile.runctx('lda_learning(lda, options.iteration)', globals(), locals(), 'lda.profile')
+    #cProfile.runctx('lda_learning(lda, options.iteration, voca)', globals(), locals(), 'lda.profile')
     lda_learning(lda, options.iteration, voca)
-    output_word_topic_dist(lda, voca)
 
 if __name__ == "__main__":
     main()
