@@ -18,10 +18,11 @@ def lda_learning(f, LDA, smartinit, options, docs, voca, plimit=1):
     lda = LDA(options.K, options.alpha, options.beta, docs, voca.size(), smartinit)
 
     pre_perp = lda.perplexity()
-    pc = 0
     f.out("alg=%s smart_init=%s initial perplexity=%f" % (LDA.__name__, smartinit, pre_perp))
 
+    pc = 0
     for i in range(options.iteration):
+        if i % 10==0: output_word_topic_dist(f, lda, voca)
         lda.inference()
         perp = lda.perplexity()
         f.out("-%d p=%f" % (i + 1, perp))
