@@ -71,15 +71,18 @@ class LDA_CVB0:
         """get topic-word distribution"""
         return numpy.transpose(self.n_wk / self.n_k)
 
-    def perplexity(self):
+    def perplexity(self, docs=None):
+        if docs == None: docs = self.docs
         phi = self.worddist()
         log_per = 0
-        for j, doc in enumerate(self.docs):
+        N = 0
+        for j, doc in enumerate(docs):
             theta = self.n_jk[j]
             theta = theta / theta.sum()
             for w, freq in doc:
                 log_per -= numpy.log(numpy.inner(phi[:,w], theta)) * freq
-        return numpy.exp(log_per / self.N)
+                N += freq
+        return numpy.exp(log_per / N)
 
 def lda_learning(lda, iteration, voca):
     pre_perp = lda.perplexity()

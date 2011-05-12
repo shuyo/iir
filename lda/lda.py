@@ -61,15 +61,18 @@ class LDA:
         """get topic-word distribution"""
         return self.n_z_t / self.n_z[:, numpy.newaxis]
 
-    def perplexity(self):
+    def perplexity(self, docs=None):
+        if docs == None: docs = self.docs
         phi = self.worddist()
         log_per = 0
+        N = 0
         Kalpha = self.K * self.alpha
-        for m, doc in enumerate(self.docs):
-            theta = self.n_m_z[m] / (len(doc) + Kalpha)
+        for m, doc in enumerate(docs):
+            theta = self.n_m_z[m] / (len(self.docs[m]) + Kalpha)
             for w in doc:
                 log_per -= numpy.log(numpy.inner(phi[:,w], theta))
-        return numpy.exp(log_per / self.N)
+            N += len(doc)
+        return numpy.exp(log_per / N)
 
 def lda_learning(lda, iteration, voca):
     pre_perp = lda.perplexity()
