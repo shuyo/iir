@@ -168,14 +168,14 @@ class HDPLDA:
         self.n_jt[j][t_old] -= 1
 
         if self.n_jt[j][t_old]==0:
-            # 客がいなくなったテーブル
+            # table that all guests are gone
             tables.remove(t_old)
             self.m_k[k_old] -= 1
             self.n_tables -= 1
             self.updated_n_tables()
 
             if self.m_k[k_old] == 0:
-                # 客がいなくなった料理(トピック)
+                # topic (dish) that all guests are gone
                 self.topics.remove(k_old)
 
         # sampling from posterior p(t_ji=t)
@@ -203,15 +203,14 @@ class HDPLDA:
         else:
             return self.new_table(j, i, f_k)
 
-    # 客 x_ji を新しいテーブルに案内
-    # テーブルのトピック(料理)もサンプリング
+    # Assign guest x_ji to a new table and draw topic (dish) of the table
     def new_table(self, j, i, f_k):
-        # 空きテーブルIDを取得
+        # search a spare table ID
         T_j = self.n_jt[j].size
         for t_new in range(T_j):
             if t_new not in self.tables[j]: break
         else:
-            # new table ID
+            # new table ID (no spare)
             t_new = T_j
             self.n_jt[j].resize(t_new+1)
             self.n_jt[j][t_new] = 0
@@ -220,7 +219,7 @@ class HDPLDA:
         self.n_tables += 1
         self.updated_n_tables()
 
-        # sampling of k (新しいテーブルの料理(トピック))
+        # sampling of k for new topic(= dish of new table)
         p_k = [self.m_k[k] * f_k[k] for k in self.topics]
         p_k.append(self.gamma_f_k_new_x_ji)
         k_new = self.sampling_topic(numpy.array(p_k, copy=False))
@@ -231,7 +230,7 @@ class HDPLDA:
         return t_new
 
     # sampling topic
-    # 新しいトピックの場合、パラメータの領域を確保
+    # In the case of new topic, allocate resource for parameters
     def sampling_topic(self, p_k):
         drawing = numpy.random.multinomial(1, p_k / p_k.sum()).argmax()
         if drawing < len(self.topics):
