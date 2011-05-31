@@ -24,8 +24,8 @@ class LDA:
             self.N += len(doc)
             z_n = []
             for t in doc:
-                p_z = self.n_z_t[:, t] * self.n_m_z[m] / self.n_z
                 if smartinit:
+                    p_z = self.n_z_t[:, t] * self.n_m_z[m] / self.n_z
                     z = numpy.random.multinomial(1, p_z / p_z.sum()).argmax()
                 else:
                     z = numpy.random.randint(0, K)
