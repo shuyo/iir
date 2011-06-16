@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # Labeled Latent Dirichlet Allocation
+# This code is available under the MIT License.
 # (c)2010 Nakatani Shuyo / Cybozu Labs Inc.
 # refer to Ramage+, Labeled LDA: A supervised topic model for credit attribution in multi-labeled corpora(EMNLP2009)
 

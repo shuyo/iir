@@ -1,5 +1,8 @@
 #!/usr/bin/python
 
+# This code is available under the MIT License.
+# (c)2010-2011 Nakatani Shuyo / Cybozu Labs Inc.
+
 import numpy
 
 class FileOutput:
