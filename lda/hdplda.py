@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # Hierarchical Dirichlet Process - Latent Dirichlet Allocation
+# This code is available under the MIT License.
 # (c)2010-2011 Nakatani Shuyo / Cybozu Labs Inc.
 # (refer to "Hierarchical Dirichlet Processes"(Teh et.al, 2005))
 

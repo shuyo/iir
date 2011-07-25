@@ -1,4 +1,8 @@
 
+# Latent Dirichlet Allocation + collapsed Gibbs sampling
+# This code is available under the MIT License.
+# (c)2010-2011 Nakatani Shuyo / Cybozu Labs Inc.
+
 K <- 50;
 I <- 200;
 

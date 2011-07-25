@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
+# This code is available under the MIT License.
+# (c)2010-2011 Nakatani Shuyo / Cybozu Labs Inc.
+
 import nltk, re
 
 def load_corpus(range):
