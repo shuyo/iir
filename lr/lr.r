@@ -36,22 +36,35 @@ inference <- function(title, xlist, tlist, phi) {
 	PHI <- t(apply(xlist, 1, phi))  # NxM - design matrix
 	M <- ncol(PHI)  # 特徴数(特徴空間の次元)
 	K <- ncol(tlist) # クラス数
+	lambda <- 1.0 # 正則化係数
 
 	for (i in 1:I) {
 		# 重み初期化
 		w <- matrix(rnorm(M * K), M)
 
 		eta <- 0.1  # 学習率
-		while (eta > 0.0001) {
+		while (eta > 0.001) {
+			# 確率的勾配降下法
 			for(n in sample(N)) {
-				w <- w - eta * dEn(PHI[n,], tlist[n,], w)  # 確率的勾配降下法
+				w <- w - eta * dEn(PHI[n,], tlist[n,], w)
 			}
 			eta <- eta * 0.95
 		}
+		eta <- 0.1  # 学習率
+		while (eta > 0.0001) {
+			# 最急降下法
+			ylist <- t(apply(PHI, 1, function(phi) y(phi, w)))
+			w <- w - eta * (t(PHI) %*% (ylist - tlist))
+			if (lambda>0) w <- sign(w) * pmax(sign(w) * w - eta * lambda, 0) #L1
+
+			eta <- eta * 0.95
+		}
+		#print(w)
 
 		ylist <- t(apply(PHI, 1, function(phi) y(phi, w)))
 		error <- sum(sapply(1:nrow(PHI), function(n) En(PHI[n,], tlist[n,], w)))
-		cat(sprintf("%s: error=%.3f", title, error), "\n")
+		nf <- sum(abs(w) > 0.0001) # size of relevant features
+		cat(sprintf("%s: error=%.3f, relevant features=%d/%d\n", title, error, nf, length(w)))
 
 		# 可視化
 		if (chart) {
