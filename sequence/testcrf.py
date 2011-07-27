@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 # Project Gutenberg Content Extractor with CRF
 
+import numpy
 import time
 from optparse import OptionParser
 from crf import CRF, Features, FeatureVector
@@ -87,104 +88,67 @@ def main():
 
     crf = CRF(features, 0)
     theta0 = crf.random_param()
-    print "log likelihood:", crf.likelihood(fvs, theta0)
+    print "initial log likelihood:", crf.likelihood(fvs, theta0)
+
+
+    print ">> Steepest Descent"
+    theta = theta0.copy()
+    eta = 0.5
+    t = time.time()
+    for i in range(10):
+        theta += eta * crf.gradient_likelihood(fvs, theta)
+        print i, "log likelihood:", crf.likelihood(fvs, theta)
+        eta *= 0.95
+    print "time = %.3f, relevant features = %d / %d" % (time.time() - t, (numpy.abs(theta) > 0.00001).sum(), theta.size)
+
+    print ">> SGD"
+    theta = theta0.copy()
+    eta = 0.5
+    t = time.time()
+    for i in range(20):
+        for fs in fvs:
+            grad = crf.gradient_likelihood([fv], theta)
+            theta += eta * grad
+        print i, "log likelihood:", crf.likelihood(fvs, theta)
+        eta *= 0.95
+    print "time = %.3f, relevant features = %d / %d" % (time.time() - t, (numpy.abs(theta) > 0.00001).sum(), theta.size)
+
+    print ">> SGD + FOBOS L1"
+    theta = theta0.copy()
+    eta = 0.5
+    lmd = 0.01
+    t = time.time()
+    for i in range(20):
+        lmd_eta = lmd * eta
+        for fs in fvs:
+            grad = crf.gradient_likelihood([fv], theta)
+            theta += eta * grad
+            theta = (theta > lmd_eta) * (theta - lmd_eta) + (theta < -lmd_eta) * (theta + lmd_eta)
+        print i, "log likelihood:", crf.likelihood(fvs, theta)
+        eta *= 0.95
+    print "time = %.3f, relevant features = %d / %d" % (time.time() - t, (numpy.abs(theta) > 0.00001).sum(), theta.size)
+
+    print ">> Steepest Descent + FOBOS L1"
+    theta = theta0.copy()
+    eta = 0.2
+    lmd = 0.5
+    t = time.time()
+    for i in range(20):
+        theta += eta * crf.gradient_likelihood(fvs, theta)
+        lmd_eta = lmd * eta
+        theta = (theta > lmd_eta) * (theta - lmd_eta) + (theta < -lmd_eta) * (theta + lmd_eta)
+        print i, "log likelihood:", crf.likelihood(fvs, theta)
+        eta *= 0.9
+    print "time = %.3f, relevant features = %d / %d" % (time.time() - t, (numpy.abs(theta) > 0.00001).sum(), theta.size)
+    #print theta
 
     print ">> BFGS"
     t = time.time()
     theta = theta0.copy()
     theta2 = crf.inference(fvs, theta)
     print "log likelihood:", crf.likelihood(fvs, theta2)
-    print "time:", (time.time() - t)
+    print "time = %.3f, relevant features = %d / %d" % (time.time() - t, (numpy.abs(theta) > 0.00001).sum(), theta.size)
 
-    print ">> Steepest Descent"
-    t = time.time()
-    theta = theta0.copy()
-    for i in range(10):
-        grad = crf.gradient_likelihood(fvs, theta)
-        #print "gradient:", grad
-        theta += 0.2 * grad
-        print i, "log likelihood:", crf.likelihood(fvs, theta)
-    print "time:", (time.time() - t)
-
-    print ">> SGD"
-    t = time.time()
-    theta = theta0.copy()
-    eta = 0.5
-    for i in range(10):
-        for fs in fvs:
-            grad = crf.gradient_likelihood([fv], theta)
-            theta += eta * grad
-        print i, "log likelihood:", crf.likelihood(fvs, theta)
-        eta *= 0.95
-    print "time:", (time.time() - t)
-
-    print ">> SGD + FOBOS L1"
-    t = time.time()
-    theta = theta0.copy()
-    eta = 0.5
-    lmd = 0.01
-    for i in range(10):
-        lmd_eta = lmd * eta
-        for fs in fvs:
-            grad = crf.gradient_likelihood([fv], theta)
-            theta += eta * grad
-            for i, w in enumerate(theta):
-                if w > 0:
-                    if w > lmd_eta:
-                        theta[i] = w - lmd_eta
-                    else:
-                        theta[i] = 0
-                elif w < 0:
-                    if w < -lmd_eta:
-                        theta[i] = w + lmd_eta
-                    else:
-                        theta[i] = 0
-        print i, "log likelihood:", crf.likelihood(fvs, theta)
-        eta *= 0.95
-    print "time:", (time.time() - t)
-
-    print ">> Steepest Descent + FOBOS L1"
-    t = time.time()
-    theta = theta0.copy()
-    eta = 0.2
-    lmd = 0.1
-    for i in range(20):
-        lmd_eta = lmd * eta
-        grad = crf.gradient_likelihood(fvs, theta)
-        #print "gradient:", grad
-        theta += eta * grad
-        for i, w in enumerate(theta):
-            if w > 0:
-                if w > lmd_eta:
-                    theta[i] = w - lmd_eta
-                else:
-                    theta[i] = 0
-            elif w < 0:
-                if w < -lmd_eta:
-                    theta[i] = w + lmd_eta
-                else:
-                    theta[i] = 0
-        print i, "log likelihood:", crf.likelihood(fvs, theta)
-    print "time:", (time.time() - t)
-    print theta
-
-
-def hoge():
-    print "features:", features.size()
-    print "labels:", len(features.labels)
-
-    #print "theta:", theta
-    print "log likelihood:", crf.likelihood(fvs, theta)
-    prob, ys = crf.tagging(text_fv, theta)
-    print "tagging:", prob, features.id2label(ys)
-
-    theta = crf.inference(fvs, theta)
-
-    #print "theta:", theta
-    print "log likelihood:", crf.likelihood(fvs, theta)
-    prob, ys = crf.tagging(text_fv, theta)
-    print "tagging:", prob, zip(test_texts[0], test_labels[0], features.id2label(ys))
-    print theta
 
 if __name__ == "__main__":
     main()

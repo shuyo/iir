@@ -6,7 +6,7 @@
 # (c)2010-2011 Nakatani Shuyo / Cybozu Labs Inc.
 
 import numpy
-from scipy import optimize, maxentropy
+from scipy import maxentropy
 
 def logdotexp_vec_mat(loga, logM):
     return numpy.array([maxentropy.logsumexp(loga + x) for x in logM.T], copy=False)
@@ -177,6 +177,7 @@ class CRF(object):
         return grad - self.regularity_deriv(theta)
 
     def inference(self, fvs, theta):
+        from scipy import optimize
         likelihood = lambda x:-self.likelihood(fvs, x)
         likelihood_deriv = lambda x:-self.gradient_likelihood(fvs, x)
         return optimize.fmin_bfgs(likelihood, theta, fprime=likelihood_deriv)
