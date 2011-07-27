@@ -147,7 +147,7 @@ def main():
     theta = theta0.copy()
     theta2 = crf.inference(fvs, theta)
     print "log likelihood:", crf.likelihood(fvs, theta2)
-    print "time = %.3f, relevant features = %d / %d" % (time.time() - t, (numpy.abs(theta) > 0.00001).sum(), theta.size)
+    print "time = %.3f, relevant features = %d / %d" % (time.time() - t, (numpy.abs(theta2) > 0.00001).sum(), theta.size)
 
 
 if __name__ == "__main__":
