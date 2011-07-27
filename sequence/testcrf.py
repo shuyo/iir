@@ -95,7 +95,7 @@ def main():
     theta = theta0.copy()
     eta = 0.5
     t = time.time()
-    for i in range(10):
+    for i in range(20):
         theta += eta * crf.gradient_likelihood(fvs, theta)
         print i, "log likelihood:", crf.likelihood(fvs, theta)
         eta *= 0.95
@@ -107,8 +107,7 @@ def main():
     t = time.time()
     for i in range(20):
         for fs in fvs:
-            grad = crf.gradient_likelihood([fv], theta)
-            theta += eta * grad
+            theta += eta * crf.gradient_likelihood([fv], theta)
         print i, "log likelihood:", crf.likelihood(fvs, theta)
         eta *= 0.95
     print "time = %.3f, relevant features = %d / %d" % (time.time() - t, (numpy.abs(theta) > 0.00001).sum(), theta.size)
@@ -121,8 +120,7 @@ def main():
     for i in range(20):
         lmd_eta = lmd * eta
         for fs in fvs:
-            grad = crf.gradient_likelihood([fv], theta)
-            theta += eta * grad
+            theta += eta * crf.gradient_likelihood([fv], theta)
             theta = (theta > lmd_eta) * (theta - lmd_eta) + (theta < -lmd_eta) * (theta + lmd_eta)
         print i, "log likelihood:", crf.likelihood(fvs, theta)
         eta *= 0.95
@@ -144,10 +142,9 @@ def main():
 
     print ">> BFGS"
     t = time.time()
-    theta = theta0.copy()
-    theta2 = crf.inference(fvs, theta)
-    print "log likelihood:", crf.likelihood(fvs, theta2)
-    print "time = %.3f, relevant features = %d / %d" % (time.time() - t, (numpy.abs(theta2) > 0.00001).sum(), theta.size)
+    theta = crf.inference(fvs, theta0)
+    print "log likelihood:", crf.likelihood(fvs, theta)
+    print "time = %.3f, relevant features = %d / %d" % (time.time() - t, (numpy.abs(theta) > 0.00001).sum(), theta.size)
 
 
 if __name__ == "__main__":
