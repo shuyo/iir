@@ -106,7 +106,7 @@ def main():
     eta = 0.5
     t = time.time()
     for i in range(20):
-        for fs in fvs:
+        for fv in fvs:
             theta += eta * crf.gradient_likelihood([fv], theta)
         print i, "log likelihood:", crf.likelihood(fvs, theta)
         eta *= 0.95
@@ -119,7 +119,7 @@ def main():
     t = time.time()
     for i in range(20):
         lmd_eta = lmd * eta
-        for fs in fvs:
+        for fv in fvs:
             theta += eta * crf.gradient_likelihood([fv], theta)
             theta = (theta > lmd_eta) * (theta - lmd_eta) + (theta < -lmd_eta) * (theta + lmd_eta)
         print i, "log likelihood:", crf.likelihood(fvs, theta)
