@@ -15,7 +15,7 @@ def load_dir(dir):
 
     labels = []
     texts = []
-    for filename in glob.glob(os.path.join(dir, '*.html')):
+    for filename in glob.glob(os.path.join(dir, '*.htm*')):
         text, label = load_file(filename)
         texts.append(text)
         labels.append(label)
@@ -76,7 +76,7 @@ class BlockInfo(object):
         self.has_date = re.search(r'20[01][0-9]\s?[\-\/]\s?[0-9]{1,2}\s?[\-\/]\s?[0-9]{1,2}', self.plain_text) or re.search(r'20[01][0-9]年[0-9]{1,2}月[0-9]{1,2}日', self.plain_text)
         self.affi_link = re.search(r'amazon[\w\d\.\/\-\?&]+-22', block)
     def __getitem__(self, key):
-        if key not in self.map: raise IndexError, key
+        if key not in self.map: return 0 #raise IndexError, key
         return self.map[key]
     def has(self, word):
         if word in self.has_word: return self.has_word[word]
@@ -98,27 +98,36 @@ def wce_features(LABELS):
     features = Features(LABELS)
     for label in LABELS:
         # keywords
-        for word in "Copyright|All Rights Reserved|広告掲載|会社概要|無断転載|プライバシーポリシー|利用規約|お問い合わせ|トラックバック|ニュースリリース|新着|無料|確認メール|コメントする|アソシエイト|プロフィール|カレンダー|カテゴリー".split('|'):
+        for word in "Copyright|All Rights Reserved|広告掲載|会社概要|無断転載|プライバシーポリシー|利用規約|お問い合わせ|トラックバック|ニュースリリース|新着|無料|確認メール|コメントする|アソシエイト|プロフィール|カレンダー|カテゴリー|ログイン|検索|トップ|個人情報|".split('|'):
             features.add_feature( lambda x, y, w=word, l=label: 1 if x.has(w) and y == l else 0 )
             #features.add_feature( lambda x, y, w=word, l=label: 1 if re.search(w, x.org_text, re.I) and y == l else 0 )
 
         # html tags
-        for tag in "a|p|div|ul|ol|li|dl|dt|dd|table|tr|td|h1|h2|h3|h4|h5|h6|meta|form|input|select|option|object|img".split('|'):
-            features.add_feature( lambda x, y, t=tag, l=label: 1 if t in x and y == l else 0 )
+        for tag in "a|p|div|span|ul|ol|li|br|dl|dt|dd|table|tr|td|h1|h2|h3|h4|h5|h6|b|i|center|strong|big|small|meta|form|input|select|option|object|img|iframe|noscript".split('|'):
+            features.add_feature( lambda x, y, t=tag, l=label: 1 if y == l and x[t] > 0 else 0 )
+            features.add_feature( lambda x, y, t=tag, l=label: 1 if y == l and x[t] < 3 else 0 )
+            features.add_feature( lambda x, y, t=tag, l=label: 1 if y == l and x[t] > 5 else 0 )
 
         # date & affiliate link
         features.add_feature( lambda x, y, l=label: 1 if x.has_date and y == l else 0 )
         features.add_feature( lambda x, y, l=label: 1 if x.affi_link and y == l else 0 )
 
         # punctuation
+        features.add_feature( lambda x, y, l=label: 1 if x.n_ten==0 and y == l else 0 )
         features.add_feature( lambda x, y, l=label: 1 if x.n_ten>0 and y == l else 0 )
         features.add_feature( lambda x, y, l=label: 1 if x.n_ten>1 and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if x.n_ten>2 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_ten>3 and y == l else 0 )
         features.add_feature( lambda x, y, l=label: 1 if x.n_ten>5 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_maru==0 and y == l else 0 )
         features.add_feature( lambda x, y, l=label: 1 if x.n_maru>0 and y == l else 0 )
         features.add_feature( lambda x, y, l=label: 1 if x.n_maru>1 and y == l else 0 )
-        features.add_feature( lambda x, y, l=label: 1 if x.n_maru>2 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_maru>3 and y == l else 0 )
         features.add_feature( lambda x, y, l=label: 1 if x.n_maru>5 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_ten+x.n_maru==0 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_ten+x.n_maru>0 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_ten+x.n_maru>1 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_ten+x.n_maru>3 and y == l else 0 )
+        features.add_feature( lambda x, y, l=label: 1 if x.n_ten+x.n_maru>5 and y == l else 0 )
 
         # text length
         features.add_feature( lambda x, y, l=label: 1 if x.len_text==0 and y == l else 0 )
@@ -138,6 +147,10 @@ def wce_features(LABELS):
             features.add_feature_edge( lambda y_, y, l1=label1, l2=label2: 1 if y_ == l1 and y == l2 else 0 )
 
     return features
+
+class CountDict(dict):
+    def __getitem__(self, key):
+        return super(CountDict,self).get(key, 0)
 
 def wce_output_tagging(text, label, prob, tagged_label):
     '''tagging & output'''
@@ -180,6 +193,7 @@ def main():
     parser.add_option("-m", dest="model", help="model file")
     parser.add_option("-b", dest="body", action="store_true", help="output body")
     parser.add_option("-l", dest="regularity", type="int", help="regularity. 0=none, 1=L1, 2=L2 [2]", default=2)
+    parser.add_option("--l1", dest="fobos_l1", action="store_true", help="FOBOS L1", default=False)
     (options, args) = parser.parse_args()
     if not options.training_dir and not options.model:
         parser.error("need training data directory(-d) or model file(-m)")
@@ -205,7 +219,25 @@ def main():
         print "features:", features.size()
         print "labels:", len(features.labels), features.labels
         print "log likelihood (before inference):", crf.likelihood(fvs, theta)
-        theta = crf.inference(fvs, theta)
+        if options.fobos_l1:
+            eta = 0.0001
+            for i in range(30):
+                for fv in fvs:
+                    theta += eta * crf.gradient_likelihood([fv], theta)
+                    print i, "log likelihood:", crf.likelihood(fvs, theta)
+                eta *= 0.95
+            lmd = 0.1
+            for i in range(30):
+                theta += eta * crf.gradient_likelihood(fvs, theta)
+                lmd_eta = lmd * eta
+                theta = (theta > lmd_eta) * (theta - lmd_eta) + (theta < -lmd_eta) * (theta + lmd_eta)
+                print i, "log likelihood:", crf.likelihood(fvs, theta)
+                eta *= 0.95
+            import numpy
+            print "relevant features = %d / %d" % ((numpy.abs(theta) > 0.00001).sum(), theta.size)
+        else:
+            theta = crf.inference(fvs, theta)
+        print "log likelihood (after inference):", crf.likelihood(fvs, theta)
         if options.model:
             f = open(options.model, 'w')
             f.write(pickle.dumps((LABELS, theta)))
@@ -214,26 +246,37 @@ def main():
         raise ValueError, "model's length not equal feature's length."
 
     if options.test_dir:
-        test_files = glob.glob(options.test_dir + '/*')
+        test_files = glob.glob(options.test_dir + '/*.htm*')
     elif options.test_file:
         test_files = [options.test_file]
     else:
         test_files = []
 
-    i = 0
-    for filename in test_files:
+    corrects = blocks = 0
+    for i, filename in enumerate(test_files):
         if not options.body: print "========== test = ", i
         text, label = load_file(filename)
         fv = FeatureVector(features, text)
         prob, ys = crf.tagging(fv, theta)
         tagged_label = features.id2label(ys)
 
+        cor, blo = len(filter(lambda x:x[0]==x[1], zip(label, tagged_label))), len(label)
+        corrects += cor
+        blocks += blo
+        print "log_likely = %.3f, rate = %d / %d" % (prob, cor, blo)
+
         if options.body:
             for x, l in zip(text, tagged_label):
                 if l == "body": print re.sub(r'\s+', ' ', re.sub(r'(?s)<[^>]+>', '', x.org_text)).strip()
         else:
-            wce_output_tagging(text, label, prob, tagged_label)
-        i += 1
+            #wce_output_tagging(text, label, prob, tagged_label)
+            map = CountDict()
+            for x in zip(label, tagged_label):
+                map[x] += 1
+            for x in sorted(map):
+                print x[0], " => ", x[1], " : ", map[x]
+    if blocks > 0:
+        print "total : %d / %d = %.3f%%" % (corrects, blocks, 100.0 * corrects / blocks)
 
 if __name__ == "__main__":
     main()
