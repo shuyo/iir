@@ -198,13 +198,14 @@ def main():
     if not options.training_dir and not options.model:
         parser.error("need training data directory(-d) or model file(-m)")
 
+    theta = LABELS = None
+    if options.model and os.path.isfile(options.model):
+        with open(options.model, 'r') as f:
+            LABELS, theta = pickle.loads(f.read())
     if options.training_dir:
         texts, labels = load_dir(options.training_dir)
-        LABELS = unique(flatten(labels))
-    else:
-        f = open(options.model, 'r')
-        LABELS, theta = pickle.loads(f.read())
-        f.close()
+        if LABELS == None:
+            LABELS = unique(flatten(labels))
 
     features = wce_features(LABELS)
     crf = CRF(features, options.regularity)
@@ -213,35 +214,39 @@ def main():
         fvs = [FeatureVector(features, x, y) for x, y in zip(texts, labels)]
 
         # initial parameter (pick up max in 10 random parameters)
-        theta = sorted([crf.random_param() for i in range(10)], key=lambda t:crf.likelihood(fvs, t))[-1]
+        if theta == None:
+            theta = sorted([crf.random_param() for i in range(10)], key=lambda t:crf.likelihood(fvs, t))[-1]
 
         # inference
         print "features:", features.size()
         print "labels:", len(features.labels), features.labels
         print "log likelihood (before inference):", crf.likelihood(fvs, theta)
         if options.fobos_l1:
-            eta = 0.0001
-            for i in range(30):
+            eta = 0.000001
+            for i in range(0):
                 for fv in fvs:
                     theta += eta * crf.gradient_likelihood([fv], theta)
                     print i, "log likelihood:", crf.likelihood(fvs, theta)
-                eta *= 0.95
-            lmd = 0.1
-            for i in range(30):
-                theta += eta * crf.gradient_likelihood(fvs, theta)
-                lmd_eta = lmd * eta
-                theta = (theta > lmd_eta) * (theta - lmd_eta) + (theta < -lmd_eta) * (theta + lmd_eta)
-                print i, "log likelihood:", crf.likelihood(fvs, theta)
-                eta *= 0.95
-            import numpy
-            print "relevant features = %d / %d" % ((numpy.abs(theta) > 0.00001).sum(), theta.size)
+                eta *= 0.98
+            lmd = 1
+            while lmd < 200:
+                for i in range(50):
+                    theta += eta * crf.gradient_likelihood(fvs, theta)
+                    lmd_eta = lmd * eta
+                    theta = (theta > lmd_eta) * (theta - lmd_eta) + (theta < -lmd_eta) * (theta + lmd_eta)
+                    if i % 10 == 5: print i, "log likelihood:", crf.likelihood(fvs, theta)
+                    #eta *= 0.95
+                import numpy
+                print "%d : relevant features = %d / %d" % (lmd, (numpy.abs(theta) > 0.00001).sum(), theta.size)
+                with open(options.model + str(lmd), 'w') as f:
+                    f.write(pickle.dumps((LABELS, theta)))
+                lmd += 1
         else:
             theta = crf.inference(fvs, theta)
         print "log likelihood (after inference):", crf.likelihood(fvs, theta)
         if options.model:
-            f = open(options.model, 'w')
-            f.write(pickle.dumps((LABELS, theta)))
-            f.close()
+            with open(options.model, 'w') as f:
+                f.write(pickle.dumps((LABELS, theta)))
     elif features.size() != len(theta):
         raise ValueError, "model's length not equal feature's length."
 
@@ -251,6 +256,10 @@ def main():
         test_files = [options.test_file]
     else:
         test_files = []
+
+    for x in sorted(theta):
+        print x,
+    print
 
     corrects = blocks = 0
     for i, filename in enumerate(test_files):
