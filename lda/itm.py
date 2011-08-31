@@ -15,16 +15,15 @@ class ITM:
         self.eta   = eta   # second parameter of words prior
         self.docs  = docs
         self.V = V
-        self.J = 0 # constraints size
 
         self.n_d_k = numpy.zeros((len(docs), K)) + alpha     # word count of each document and topic
-        self.n_k_w = numpy.zeros((K, V))
+        self.n_k_w = numpy.zeros((K, V), dtype=int)
         self.n_j_k = []
         #self.n_j_w_k = []  # j is unique for w, then n_j_w_k == n_w_k. Therefore is this useless???
         self.n_k = numpy.zeros(K) + V * beta    # word count of each topic
         self.c_j = []
 
-        self.w_to_j = numpy.zeros(V, dtype=int) - 1
+        self.w_to_j = dict()
 
         self.z_d_n = [] # topics of words of documents
         self.N = 0
@@ -37,17 +36,22 @@ class ITM:
             raise "need more than 2 words for constraint"
 
         constraint_id = -1
+        diff_c_j = 0
         for w in words:
-            if self.w_to_j[w] >= 0:
+            if w in self.w_to_j:
                 if constraint_id < 0:
                     constraint_id = self.w_to_j[w]
                 elif constraint_id != self.w_to_j[w]:
                     raise "specified words have belonged into more than 2 constraints"
+            else:
+                diff_c_j += 1
+        if diff_c_j == 0:
+            raise "all specified words belonged the same constraint already"
 
         if constraint_id < 0:
             constraint_id = len(self.c_j)
             self.c_j.append(0)
-            self.n_j_k.append(numpy.zeros(self.K))
+            self.n_j_k.append(numpy.zeros(self.K, dtype=int))
             #self.n_j_w_k.append(dict())
 
         if method == "all":
@@ -57,15 +61,11 @@ class ITM:
         elif method == "term":
             pass
         else: # no terms are unassigned
-            diff_c_j = 0
             for w in words:
-                if self.w_to_j[w] == constraint_id:
+                if w in self.w_to_j:
                     continue
                 self.w_to_j[w] = constraint_id
                 self.n_j_k[constraint_id] += self.n_k_w[:, w]
-                diff_c_j += 1
-            if diff_c_j == 0:
-                raise "all specified words belonged the same constraint already"
             self.c_j[constraint_id] += diff_c_j
 
     def inference(self):
@@ -76,20 +76,20 @@ class ITM:
             n_d_k = self.n_d_k[d]
             for n, w in enumerate(doc):
                 k = z_n[n]
-                j = self.w_to_j[w]
+                j = self.w_to_j.get(w, -1)
                 if k >= 0:
                     n_d_k[k] -= 1
                     self.n_k_w[k, w] -= 1
                     self.n_k[k] -= 1
                     if j >= 0:
                         self.n_j_k[j][k] -= 1
-                        self.n_j_k_w[j][k, w] -= 1
 
                 # sampling topic new_z for t
                 if j >= 0:
                     c_j = self.c_j[j]
                     n_j_k = self.n_j_k[j]
                     p_z = n_d_k * (self.n_k_w[:, w] + eta)  * (n_j_k + c_j * beta) / ((n_j_k + c_j * eta) * self.n_k)
+                    print d, w, k, j, n_j_k, p_z
                 else:
                     p_z = n_d_k * (self.n_k_w[:, w] + beta) / self.n_k
                 new_k = numpy.random.multinomial(1, p_z / p_z.sum()).argmax()
@@ -101,7 +101,6 @@ class ITM:
                 self.n_k[new_k] += 1
                 if j >= 0:
                     self.n_j_k[j][new_k] += 1
-                    self.n_j_k_w[j][new_k, w] += 1
 
     def worddist(self):
         """get topic-word distribution"""
@@ -142,13 +141,14 @@ def main():
     parser.add_option("-m", dest="model", help="model filename")
     parser.add_option("-f", dest="filename", help="corpus filename")
     parser.add_option("-b", dest="corpus", help="using range of Brown corpus' files(start:end)")
-    parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha", default=0.5)
-    parser.add_option("--beta", dest="beta", type="float", help="parameter beta", default=0.5)
-    parser.add_option("--eta", dest="eta", type="float", help="parameter eta", default=0.5)
+    parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha", default=0.1)
+    parser.add_option("--beta", dest="beta", type="float", help="parameter beta", default=0.01)
+    parser.add_option("--eta", dest="eta", type="float", help="parameter eta", default=100)
     parser.add_option("-k", dest="K", type="int", help="number of topics", default=20)
     parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=10)
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
     parser.add_option("--df", dest="df", type="int", help="threshold of document freaquency to cut words", default=0)
+    parser.add_option("-c", dest="constraint", help="add constraint (wordlist which should belong to the same topic)")
     (options, args) = parser.parse_args()
 
     numpy.random.seed(options.seed)
@@ -170,6 +170,12 @@ def main():
         if options.df > 0: docs = voca.cut_low_freq(docs, options.df)
         lda = ITM(options.K, options.alpha, options.beta, options.eta, docs, voca.size())
     print "corpus=%d, words=%d, K=%d, a=%f, b=%f, eta=%f" % (len(lda.docs), len(voca.vocas), options.K, options.alpha, options.beta, options.eta)
+
+    if options.constraint:
+        wordlist = options.constraint.split(',')
+        idlist = [voca.vocas_id[w] for w in wordlist]
+        lda.add_constraint(idlist, "none")
+        print wordlist, idlist, lda.w_to_j, lda.c_j
 
     #import cProfile
     #cProfile.runctx('lda_learning(lda, options.iteration, voca)', globals(), locals(), 'lda.profile')
