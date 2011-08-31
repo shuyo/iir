@@ -59,7 +59,8 @@ def main():
                     kanji_ids[x] = len(kanjis)
                     kanjis.append(x)
                 doc.append(kanji_ids[x])
-            docs.append(doc)
+            if len(doc) > 0:
+                docs.append(doc)
     V = len(kanjis)
     print "corpus=%d, words=%d, K=%d, a=%f, b=%f" % (len(docs), V, options.K, options.alpha, options.beta)
 
