@@ -26,9 +26,7 @@ class ITM:
         self.w_to_j = dict()
 
         self.z_d_n = [] # topics of words of documents
-        self.N = 0
         for doc in docs:
-            self.N += len(doc)
             self.z_d_n.append( numpy.zeros(len(doc), dtype=int) - 1 )
 
     def add_constraint(self, words, method="doc"):
@@ -52,7 +50,6 @@ class ITM:
             constraint_id = len(self.c_j)
             self.c_j.append(0)
             self.n_j_k.append(numpy.zeros(self.K, dtype=int))
-            #self.n_j_w_k.append(dict())
 
         if method == "all":
             pass
@@ -89,7 +86,7 @@ class ITM:
                     c_j = self.c_j[j]
                     n_j_k = self.n_j_k[j]
                     p_z = n_d_k * (self.n_k_w[:, w] + eta)  * (n_j_k + c_j * beta) / ((n_j_k + c_j * eta) * self.n_k)
-                    print d, w, k, j, n_j_k, p_z
+                    #print d, w, k, j, n_j_k, p_z / p_z.sum()
                 else:
                     p_z = n_d_k * (self.n_k_w[:, w] + beta) / self.n_k
                 new_k = numpy.random.multinomial(1, p_z / p_z.sum()).argmax()
@@ -175,7 +172,7 @@ def main():
         wordlist = options.constraint.split(',')
         idlist = [voca.vocas_id[w] for w in wordlist]
         lda.add_constraint(idlist, "none")
-        print wordlist, idlist, lda.w_to_j, lda.c_j
+        #print wordlist, idlist, lda.w_to_j, lda.c_j
 
     #import cProfile
     #cProfile.runctx('lda_learning(lda, options.iteration, voca)', globals(), locals(), 'lda.profile')
