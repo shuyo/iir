@@ -29,9 +29,8 @@ class ITM:
         self.z_d_n = [] # topics of words of documents
         self.N = 0
         for doc in docs:
-            N_m = len(doc)
-            self.N += N_m
-            self.z_d_n.append(numpy.zeros((N_m, K), dtype=int) - 1)
+            self.N += len(doc)
+            self.z_d_n.append( numpy.zeros(len(doc), dtype=int) - 1 )
 
     def add_constraint(self, words, method="doc"):
         if len(words) < 2:
@@ -104,13 +103,9 @@ class ITM:
                     self.n_j_k[j][new_k] += 1
                     self.n_j_k_w[j][new_k, w] += 1
 
-                n_m_z[new_z] += 1
-                self.n_z_t[new_z, t] += 1
-                self.n_z[new_z] += 1
-
     def worddist(self):
         """get topic-word distribution"""
-        return self.n_z_t / self.n_z[:, numpy.newaxis]
+        return self.n_k_w / self.n_k[:, numpy.newaxis]
 
     def perplexity(self, docs=None):
         if docs == None: docs = self.docs
@@ -118,26 +113,17 @@ class ITM:
         log_per = 0
         N = 0
         Kalpha = self.K * self.alpha
-        for m, doc in enumerate(docs):
-            theta = self.n_m_z[m] / (len(self.docs[m]) + Kalpha)
+        for d, doc in enumerate(docs):
+            theta = self.n_d_k[d] / (len(self.docs[d]) + Kalpha)
             for w in doc:
                 log_per -= numpy.log(numpy.inner(phi[:,w], theta))
             N += len(doc)
         return numpy.exp(log_per / N)
 
 def lda_learning(lda, iteration, voca):
-    pre_perp = lda.perplexity()
-    print "initial perplexity=%f" % pre_perp
     for i in range(iteration):
         lda.inference()
-        perp = lda.perplexity()
-        print "-%d p=%f" % (i + 1, perp)
-        if pre_perp:
-            if pre_perp < perp:
-                output_word_topic_dist(lda, voca)
-                pre_perp = None
-            else:
-                pre_perp = perp
+        print "-%d p=%f" % (i + 1, lda.perplexity())
     output_word_topic_dist(lda, voca)
 
 def output_word_topic_dist(lda, voca):
@@ -148,39 +134,49 @@ def output_word_topic_dist(lda, voca):
             print "%s: %f" % (voca[w], phi[k,w])
 
 def main():
+    import os
+    import pickle
     import optparse
-    import vocabulary
+
     parser = optparse.OptionParser()
     parser.add_option("-m", dest="model", help="model filename")
     parser.add_option("-f", dest="filename", help="corpus filename")
-    parser.add_option("-c", dest="corpus", help="using range of Brown corpus' files(start:end)")
+    parser.add_option("-b", dest="corpus", help="using range of Brown corpus' files(start:end)")
     parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha", default=0.5)
     parser.add_option("--beta", dest="beta", type="float", help="parameter beta", default=0.5)
     parser.add_option("--eta", dest="eta", type="float", help="parameter eta", default=0.5)
     parser.add_option("-k", dest="K", type="int", help="number of topics", default=20)
-    parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=100)
+    parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=10)
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
     parser.add_option("--df", dest="df", type="int", help="threshold of document freaquency to cut words", default=0)
     (options, args) = parser.parse_args()
-    if not (options.filename or options.corpus): parser.error("need corpus filename(-f) or corpus range(-c)")
 
-    if options.filename:
-        corpus = vocabulary.load_file(options.filename)
-    else:
-        corpus = vocabulary.load_corpus(options.corpus)
-        if not corpus: parser.error("corpus range(-c) forms 'start:end'")
     numpy.random.seed(options.seed)
 
-    voca = vocabulary.Vocabulary(options.stopwords)
-    docs = [voca.doc_to_ids(doc) for doc in corpus]
-    if options.df > 0: docs = voca.cut_low_freq(docs, options.df)
-
-    lda = ITM(options.K, options.alpha, options.beta, docs, voca.size(), options.smartinit)
-    print "corpus=%d, words=%d, K=%d, a=%f, b=%f" % (len(corpus), len(voca.vocas), options.K, options.alpha, options.beta)
+    if options.model and os.path.exists(options.model):
+        with open(options.model, "rb") as f:
+            lda, voca = pickle.load(f)
+    elif not (options.filename or options.corpus):
+        parser.error("need corpus filename(-f) or corpus range(-b) or model(-m)")
+    else:
+        import vocabulary
+        if options.filename:
+            corpus = vocabulary.load_file(options.filename)
+        else:
+            corpus = vocabulary.load_corpus(options.corpus)
+            if not corpus: parser.error("corpus range(-c) forms 'start:end'")
+        voca = vocabulary.Vocabulary()
+        docs = [voca.doc_to_ids(doc) for doc in corpus]
+        if options.df > 0: docs = voca.cut_low_freq(docs, options.df)
+        lda = ITM(options.K, options.alpha, options.beta, options.eta, docs, voca.size())
+    print "corpus=%d, words=%d, K=%d, a=%f, b=%f, eta=%f" % (len(lda.docs), len(voca.vocas), options.K, options.alpha, options.beta, options.eta)
 
     #import cProfile
     #cProfile.runctx('lda_learning(lda, options.iteration, voca)', globals(), locals(), 'lda.profile')
     lda_learning(lda, options.iteration, voca)
+
+    with open(options.model, "wb") as f:
+        pickle.dump((lda, voca), f)
 
 if __name__ == "__main__":
     main()
