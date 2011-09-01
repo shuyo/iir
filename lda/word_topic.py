@@ -33,8 +33,8 @@ def main():
     import optparse
     parser = optparse.OptionParser()
     parser.add_option("-k", dest="K", type="int", help="number of topics", default=3)
-    parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha", default=0.5)
-    parser.add_option("--beta", dest="beta", type="float", help="parameter beta", default=0.5)
+    parser.add_option("-a", "--alpha", dest="alpha", type="float", help="parameter alpha", default=0.5)
+    parser.add_option("-b", "--beta", dest="beta", type="float", help="parameter beta", default=0.5)
     parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=10)
     parser.add_option("--kanji", dest="kanji", help="Kanji as word", action="store_true")
     (options, args) = parser.parse_args()
