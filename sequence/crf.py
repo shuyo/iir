@@ -351,7 +351,7 @@ def main():
     features.add_feature_edge( lambda y_, y: 0 )
 
     fvs = [FeatureVector(features, x, y) for x, y in zip(texts, labels)]
-    fv = fvs[0]
+    #fv = fvs[0]
     text_fv = FeatureVector(features, test_texts[0]) # text sequence without labels
 
 
