@@ -19,7 +19,6 @@ class ITM:
         self.n_d_k = numpy.zeros((len(docs), K)) + alpha     # word count of each document and topic
         self.n_k_w = numpy.zeros((K, V), dtype=int)
         self.n_j_k = []
-        #self.n_j_w_k = []  # j is unique for w, then n_j_w_k == n_w_k. Therefore is this useless???
         self.n_k = numpy.zeros(K) + V * beta    # word count of each topic
         self.c_j = []
 
@@ -29,7 +28,7 @@ class ITM:
         for doc in docs:
             self.z_d_n.append( numpy.zeros(len(doc), dtype=int) - 1 )
 
-    def add_constraint(self, words, method="doc"):
+    def get_constraint(self):
         if len(words) < 2:
             raise "need more than 2 words for constraint"
 
@@ -48,22 +47,63 @@ class ITM:
 
         if constraint_id < 0:
             constraint_id = len(self.c_j)
-            self.c_j.append(0)
+            self.c_j.append(diff_c_j)
             self.n_j_k.append(numpy.zeros(self.K, dtype=int))
-
-        if method == "all":
-            pass
-        elif method == "doc":
-            pass
-        elif method == "term":
-            pass
-        else: # no terms are unassigned
-            for w in words:
-                if w in self.w_to_j:
-                    continue
-                self.w_to_j[w] = constraint_id
-                self.n_j_k[constraint_id] += self.n_k_w[:, w]
+        else:
             self.c_j[constraint_id] += diff_c_j
+
+        for w in words:
+            self.w_to_j[w] = constraint_id
+
+        return constraint_id
+
+    def add_constraint_all(self, words):
+        constraint_id = self.get_constraint(words)
+
+        for z_d_n in self.z_d_n: z_d_n.fill(-1)
+        self.n_d_k.fill(self.alpha)
+        self.n_k_w.fill(0)
+        for n_j_k in self.n_j_k: n_j_k.fill(0)
+        self.n_k.fill(self.V * self.beta)
+
+    def add_constraint_doc(self, words):
+        constraint_id = self.get_constraint(words)
+
+        for d, doc in enumerate(self.docs):
+            if any(self.w_to_j.get(w, -1) == constraint_id for w in doc):
+                for n, w in enumerate(doc):
+                    k = self.z_d_n[d][n]
+                    self.n_k_w[k, w] -= 1
+                    self.n_k[k] -= 1
+                    j = self.w_to_j.get(w, -1)
+                    if j >= 0:
+                        self.n_j_k[j][k] -= 1
+
+                self.n_d_k[d].fill(0)
+                self.z_d_n[d].fill(-1)
+        self.n_j_k[constraint_id].fill(0)
+
+    def add_constraint_term(self, words):
+        constraint_id = self.get_constraint(words)
+
+        self.n_j_k[constraint_id].fill(0)
+        for d, doc in enumerate(self.docs):
+            for n, w in enumerate(doc):
+                if self.w_to_j.get(w, -1) == constraint_id:
+                    k = self.z_d_n[d][n]
+                    self.n_d_k[d][k] -= 1
+                    self.n_k_w[k, w] -= 1
+                    self.n_k[k] -= 1
+                    self.z_d_n[d][n] = -1
+
+    def add_constraint_none(self, words):
+        constraint_id = self.get_constraint(words)
+
+        n_j_k = self.n_j_k[constraint_id]
+        n_j_k.fill(0)
+        for w in words:
+            n_j_k += self.n_k_w[:, w]
+
 
     def inference(self):
         beta = self.beta
@@ -86,13 +126,11 @@ class ITM:
                     c_j = self.c_j[j]
                     n_j_k = self.n_j_k[j]
                     p_z = n_d_k * (self.n_k_w[:, w] + eta)  * (n_j_k + c_j * beta) / ((n_j_k + c_j * eta) * self.n_k)
-                    #print d, w, k, j, n_j_k, p_z / p_z.sum()
                 else:
                     p_z = n_d_k * (self.n_k_w[:, w] + beta) / self.n_k
-                new_k = numpy.random.multinomial(1, p_z / p_z.sum()).argmax()
+                new_k = z_n[n] = numpy.random.multinomial(1, p_z / p_z.sum()).argmax()
 
                 # set z the new topic and increment counters
-                z_n[n] = new_k
                 n_d_k[new_k] += 1
                 self.n_k_w[new_k, w] += 1
                 self.n_k[new_k] += 1
@@ -101,7 +139,15 @@ class ITM:
 
     def worddist(self):
         """get topic-word distribution"""
-        return self.n_k_w / self.n_k[:, numpy.newaxis]
+        dist = (self.n_k_w + self.beta) / self.n_k[:, numpy.newaxis]
+        beta = self.beta
+        eta = self.eta
+        for w in self.w_to_j:
+            j = self.w_to_j[w]
+            c_j = self.c_j[j]
+            n_j_k = self.n_j_k[j]
+            dist[:, w] = (self.n_k_w[:, w] + eta) * (n_j_k + c_j * beta) / ((n_j_k + c_j * eta) * self.n_k)
+        return dist
 
     def perplexity(self, docs=None):
         if docs == None: docs = self.docs
@@ -117,17 +163,26 @@ class ITM:
         return numpy.exp(log_per / N)
 
 def lda_learning(lda, iteration, voca):
+    print "\n== perplexity for each inference =="
     for i in range(iteration):
         lda.inference()
         print "-%d p=%f" % (i + 1, lda.perplexity())
-    output_word_topic_dist(lda, voca)
 
-def output_word_topic_dist(lda, voca):
+    print "\n== topic-word distribution =="
+    output_topic_word_dist(lda, voca)
+
+    if len(lda.w_to_j) > 0:
+        print "\n== constraints =="
+        for j, w in sorted((j, w) for w, j in lda.w_to_j.items()):
+            print "%d: %s [%s]" % (lda.w_to_j[w], voca.vocas[w], ",".join(str(x) for x in lda.n_k_w[:,w]))
+
+def output_topic_word_dist(lda, voca):
     phi = lda.worddist()
     for k in range(lda.K):
         print "\n-- topic: %d" % k
-        for w in numpy.argsort(-phi[k])[:20]:
+        for w in numpy.argsort(-phi[k])[:30]:
             print "%s: %f" % (voca[w], phi[k,w])
+
 
 def main():
     import os
@@ -146,6 +201,7 @@ def main():
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
     parser.add_option("--df", dest="df", type="int", help="threshold of document freaquency to cut words", default=0)
     parser.add_option("-c", dest="constraint", help="add constraint (wordlist which should belong to the same topic)")
+    parser.add_option("-u", "--unassign", dest="unassign", help="unassign method (all/doc/term/none)", default="none")
     (options, args) = parser.parse_args()
 
     numpy.random.seed(options.seed)
@@ -166,13 +222,24 @@ def main():
         docs = [voca.doc_to_ids(doc) for doc in corpus]
         if options.df > 0: docs = voca.cut_low_freq(docs, options.df)
         lda = ITM(options.K, options.alpha, options.beta, options.eta, docs, voca.size())
-    print "corpus=%d, words=%d, K=%d, a=%f, b=%f, eta=%f" % (len(lda.docs), len(voca.vocas), options.K, options.alpha, options.beta, options.eta)
+    param = (len(lda.docs), len(voca.vocas), options.K, options.alpha, options.beta, options.eta)
+    print "corpus=%d, words=%d, K=%d, a=%f, b=%f, eta=%f" % param
 
     if options.constraint:
+        if options.unassign == "all":
+            add_constraint = lda.add_constraint_all
+        elif options.unassign == "doc":
+            add_constraint = lda.add_constraint_doc
+        elif options.unassign == "term":
+            add_constraint = lda.add_constraint_term
+        elif options.unassign == "none":
+            add_constraint = lda.add_constraint_none
+        else:
+            parser.error("unassign method(-u) must be all/doc/term/none")
+
         wordlist = options.constraint.split(',')
         idlist = [voca.vocas_id[w] for w in wordlist]
-        lda.add_constraint(idlist, "none")
-        #print wordlist, idlist, lda.w_to_j, lda.c_j
+        add_constraint(idlist)
 
     #import cProfile
     #cProfile.runctx('lda_learning(lda, options.iteration, voca)', globals(), locals(), 'lda.profile')
