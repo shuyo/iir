@@ -28,7 +28,7 @@ class ITM:
         for doc in docs:
             self.z_d_n.append( numpy.zeros(len(doc), dtype=int) - 1 )
 
-    def get_constraint(self):
+    def get_constraint(self, words):
         if len(words) < 2:
             raise "need more than 2 words for constraint"
 
@@ -69,6 +69,7 @@ class ITM:
     def add_constraint_doc(self, words):
         constraint_id = self.get_constraint(words)
 
+        unassigned = []
         for d, doc in enumerate(self.docs):
             if any(self.w_to_j.get(w, -1) == constraint_id for w in doc):
                 for n, w in enumerate(doc):
@@ -79,9 +80,11 @@ class ITM:
                     if j >= 0:
                         self.n_j_k[j][k] -= 1
 
-                self.n_d_k[d].fill(0)
+                self.n_d_k[d].fill(self.alpha)
                 self.z_d_n[d].fill(-1)
+                unassigned.append(d)
         self.n_j_k[constraint_id].fill(0)
+        print "unassigned all words in document [%s]" % ",".join(unassigned)
 
     def add_constraint_term(self, words):
         constraint_id = self.get_constraint(words)
@@ -104,6 +107,36 @@ class ITM:
         for w in words:
             n_j_k += self.n_k_w[:, w]
 
+    def verify_topic(self):
+        n_k_w = numpy.zeros((self.K, self.V), dtype=int)
+        n_j_k = numpy.zeros((len(self.c_j), self.K), dtype=int)
+        for doc, z_n in zip(self.docs, self.z_d_n):
+            for w, k in zip(doc, z_n):
+                if k >=0:
+                    n_k_w[k, w] += 1
+                    j = self.w_to_j.get(w, -1)
+                    if j >= 0:
+                        n_j_k[j, k] += 1
+
+        c_j = numpy.zeros(len(self.c_j), dtype=int)
+        for w in self.w_to_j:
+            c_j[self.w_to_j[w]] += 1
+
+        if numpy.abs(self.n_k - self.n_k_w.sum(1) - self.V * self.beta).max() > 0.001:
+            raise "there are conflicts between n_k and n_k_w"
+        if numpy.abs(self.n_d_k.sum(0) - self.n_k + (self.V * self.beta - len(self.docs) * self.alpha)).max() > 0.001:
+
+            print self.n_d_k.sum(0) - len(self.docs) * self.alpha
+            print self.n_k - self.V * self.beta
+            raise "there are conflicts between n_d_k and n_k"
+        if numpy.any(c_j != self.c_j):
+            print c_j
+            print self.c_j
+            raise "there are conflicts between w_to_j and c_j"
+        if numpy.any(n_k_w != self.n_k_w):
+            raise "there are conflicts between z_d_n and n_k_w"
+        if numpy.any(n_j_k != self.n_j_k):
+            raise "there are conflicts between z_d_n/w_to_j and n_j_k"
 
     def inference(self):
         beta = self.beta
@@ -239,7 +272,15 @@ def main():
 
         wordlist = options.constraint.split(',')
         idlist = [voca.vocas_id[w] for w in wordlist]
+
+        print "\n== add constraint =="
+        for w, v in zip(idlist, wordlist):
+            print "%s [%s]" % (v, ",".join(str(x) for x in lda.n_k_w[:,w]))
+
         add_constraint(idlist)
+
+        lda.verify_topic()
+
 
     #import cProfile
     #cProfile.runctx('lda_learning(lda, options.iteration, voca)', globals(), locals(), 'lda.profile')
