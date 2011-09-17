@@ -16,7 +16,7 @@ class HDPLDA:
         self.V = V
 
         self.x_ji = docs # vocabulary for each document and term
-        self.t_ji = [numpy.zeros(len(x_i), dtype=int) - 1 for x_i in docs] # table for each document and term
+        self.t_ji = [numpy.zeros(len(x_i), dtype=int) - 1 for x_i in docs] # table for each document and term (without assignment)
         self.k_jt = [[] for x_i in docs] # topic for each document and table
         self.n_jt = [numpy.ndarray(0,dtype=int) for x_i in docs] # number of terms for each document and table
 
