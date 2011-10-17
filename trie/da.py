@@ -2,17 +2,22 @@
 # -*- coding: utf-8 -*-
 
 import collections
+import numpy
 
 # Double Array for static ordered data
 # This code is available under the MIT License.
 # (c)2011 Nakatani Shuyo / Cybozu Labs Inc.
 
 class DoubleArray(object):
+    def __init__(self, verbose=False):
+        self.verbose = verbose
+
     def validate_list(self, list):
         pre = ""
-        for line in list:
+        for i, line in enumerate(list):
             if pre >= line:
-                raise ""
+                raise Exception, "list has not ascent order at %d" % (i+1)
+            pre = line
 
     def initialize(self, list):
         self.validate_list(list)
@@ -27,7 +32,7 @@ class DoubleArray(object):
         while len(queue) > 0:
             index, left, right, depth = queue.popleft()
             if depth >= len(list[left]):
-                value[index] = left
+                self.value[index] = left
                 left += 1
                 if left >= right: continue
 
@@ -77,32 +82,55 @@ class DoubleArray(object):
             self.N = new_N
 
     def shrink_array(self, max_index):
-        pass
+        self.N = max_index + 1
+        self.check = numpy.array(self.check[:self.N])
+        self.base = numpy.array(self.base[:self.N])
+        self.value = numpy.array(self.value[:self.N])
+
+        not_used = self.check < 0
+        self.check[not_used] = -1
+        not_used[0] = False
+        self.base[not_used] = self.N
 
     def log(self, st):
-        print "-- %s, %s" % (time.strftime("%Y/%m/%d %H:%M:%S"), st)
-
+        if self.verbose:
+            import time
+            print "-- %s, %s" % (time.strftime("%Y/%m/%d %H:%M:%S"), st)
 
 
     def add_element(self, s, v):
-        x = self.root
-        for c in s:
-            if c not in x: x[c] = dict()
-            x = x[c]
-        x[""] = v
-
+        pass
 
     def get_subtree(self, s):
-        x = self.root
-        for c in iter(st):
-            if c not in x: return None
-            x = x[c]
-        return x
+        cur = 0
+        for c in iter(s):
+            v = ord(c)
+            next = self.base[cur] + v
+            if next >= self.N or self.check[next] != cur:
+                return None
+            cur = next
+        return cur
+
     def get_child(self, c, subtree):
-        if c not in x: return None
-        return subtree[c]
+        v = ord(c)
+        next = self.base[subtree] + v
+        if next >= self.N or self.check[next] != cur:
+            return None
+        return next
+
     def get(self, s):
-        return self.get_value(self.get_subtree(s))
+        cur = self.get_subtree(s)
+        if cur >= 0:
+            value = self.value[cur]
+            if value >= 0: return value
+        return None
+
     def get_value(self, subtree):
-        return subtree[""]
+        return self.value[subtree]
+
+def main():
+    pass
+
+if __name__ == "__main__":
+    main()
 
