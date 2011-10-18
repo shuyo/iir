@@ -6,11 +6,8 @@ import da
 
 class TestDoubleArray(unittest.TestCase):
     def test1(self):
-        trie = da.DoubleArray()
+        trie = da.DoubleArray(verbose=False)
         trie.initialize(["cat"])
-        print trie.base
-        print trie.check
-        print trie.value
         self.assertEqual(trie.N, 4)
         self.assert_(trie.get("ca") is None)
         self.assert_(trie.get("xxx") is None)
@@ -19,9 +16,6 @@ class TestDoubleArray(unittest.TestCase):
     def test2(self):
         trie = da.DoubleArray()
         trie.initialize(["cat", "dog"])
-        print trie.base
-        print trie.check
-        print trie.value
         self.assertEqual(trie.N, 7)
         self.assert_(trie.get("ca") is None)
         self.assert_(trie.get("xxx") is None)
@@ -29,12 +23,13 @@ class TestDoubleArray(unittest.TestCase):
         self.assertEqual(trie.get("dog"), 1)
 
     def test3(self):
-        trie = da.DoubleArray()
+        trie = da.DoubleArray(verbose=False)
         trie.initialize(["ca", "cat", "deer", "dog", "fox", "rat"])
         print trie.base
         print trie.check
         print trie.value
         self.assertEqual(trie.N, 17)
+        self.assert_(trie.get("c") is None)
         self.assertEqual(trie.get("ca"), 0)
         self.assertEqual(trie.get("cat"), 1)
         self.assertEqual(trie.get("deer"), 2)
@@ -45,10 +40,5 @@ class TestDoubleArray(unittest.TestCase):
         trie = da.DoubleArray()
         self.assertRaises(Exception, trie.initialize, ["cat", "ant"])
 
-def main():
-    unittest.main()
-
-
-if __name__ == "__main__":
-    main()
+unittest.main()
 

@@ -22,10 +22,10 @@ class DoubleArray(object):
     def initialize(self, list):
         self.validate_list(list)
 
-        self.N = 0
-        self.base = []
-        self.check = []
-        self.value = []
+        self.N = 1
+        self.base  = [-1]
+        self.check = [-1]
+        self.value = [-1]
 
         max_index = 0
         queue = collections.deque([(0, 0, len(list), 0)])
@@ -36,6 +36,7 @@ class DoubleArray(object):
                 left += 1
                 if left >= right: continue
 
+            # get branches of current node
             stack = collections.deque([(right, -1)])
             cur, c1 = (left, ord(list[left][depth]))
             result = []
@@ -53,14 +54,18 @@ class DoubleArray(object):
                     else:
                         cur = mid
 
+            # search empty index for current node
             v0 = result[0][1]
-            self.extend_array(max_index + result[-1][1] - v0 + 3)
-
             j = - self.check[0] - v0
-            while any(self.check[j+v] >= 0 for right, v in result):
-                j = - self.check[j+v0] - v0
-            self.base[index] = j
+            while any(j + v < self.N and self.check[j + v] >= 0 for right, v in result):
+                j = - self.check[j + v0] - v0
+            tail_index = j + result[-1][1]
+            if max_index < tail_index:
+                max_index = tail_index
+                self.extend_array(tail_index + 2)
 
+            # insert current node into DA
+            self.base[index] = j
             depth += 1
             for right, v in result:
                 child = j + v
@@ -69,19 +74,20 @@ class DoubleArray(object):
                 self.check[child] = index
                 queue.append((child, left, right, depth))
                 left = right
-            if child > max_index: max_index = child
+
         self.shrink_array(max_index)
 
     def extend_array(self, max_cand):
         if self.N < max_cand:
-            new_N = 2 ** int(numpy.ceil(numpy.log2(max_cand + 1)))
-            self.log("extend DA : %d => (%d) => %d" % (self.N, max_cand, new_N))
+            new_N = 2 ** int(numpy.ceil(numpy.log2(max_cand)))
+            self.log("extend DA : %d => (%d) => %d", (self.N, max_cand, new_N))
             self.base.extend(    n - 1 for n in xrange(self.N, new_N))
             self.check.extend( - n - 1 for n in xrange(self.N, new_N))
             self.value.extend(     - 1 for n in xrange(self.N, new_N))
             self.N = new_N
 
     def shrink_array(self, max_index):
+        self.log("shrink DA : %d => %d", (self.N, max_index + 1))
         self.N = max_index + 1
         self.check = numpy.array(self.check[:self.N])
         self.base = numpy.array(self.base[:self.N])
@@ -92,10 +98,10 @@ class DoubleArray(object):
         not_used[0] = False
         self.base[not_used] = self.N
 
-    def log(self, st):
+    def log(self, format, param):
         if self.verbose:
             import time
-            print "-- %s, %s" % (time.strftime("%Y/%m/%d %H:%M:%S"), st)
+            print "-- %s, %s" % (time.strftime("%Y/%m/%d %H:%M:%S"), format % param)
 
 
     def add_element(self, s, v):
@@ -127,10 +133,4 @@ class DoubleArray(object):
 
     def get_value(self, subtree):
         return self.value[subtree]
-
-def main():
-    pass
-
-if __name__ == "__main__":
-    main()
 
