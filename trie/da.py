@@ -103,6 +103,12 @@ class DoubleArray(object):
             import time
             print "-- %s, %s" % (time.strftime("%Y/%m/%d %H:%M:%S"), format % param)
 
+    def save(self, filename):
+        numpy.savez(filename, self.base, self.check, self.value)
+
+    def load(self, filename):
+        self.base, self.check, self.value = numpy.load(fliename)
+        self.N = self.base.size
 
     def add_element(self, s, v):
         pass
