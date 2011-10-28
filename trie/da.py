@@ -104,10 +104,13 @@ class DoubleArray(object):
             print "-- %s, %s" % (time.strftime("%Y/%m/%d %H:%M:%S"), format % param)
 
     def save(self, filename):
-        numpy.savez(filename, self.base, self.check, self.value)
+        numpy.savez(filename, base=self.base, check=self.check, value=self.value)
 
     def load(self, filename):
-        self.base, self.check, self.value = numpy.load(fliename)
+        loaded = numpy.load(filename)
+        self.base = loaded['base']
+        self.check = loaded['check']
+        self.value = loaded['value']
         self.N = self.base.size
 
     def add_element(self, s, v):
@@ -126,7 +129,7 @@ class DoubleArray(object):
     def get_child(self, c, subtree):
         v = ord(c)
         next = self.base[subtree] + v
-        if next >= self.N or self.check[next] != cur:
+        if next >= self.N or self.check[next] != subtree:
             return None
         return next
 
