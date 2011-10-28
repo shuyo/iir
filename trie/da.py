@@ -143,3 +143,21 @@ class DoubleArray(object):
     def get_value(self, subtree):
         return self.value[subtree]
 
+    def extract_features(self, st):
+        events = dict()
+        pointers = []
+        for c in iter(st):
+            pointers.append(0)
+            new_pointers = []
+            for pointer in pointers:
+                p = self.get_child(c, pointer)
+                if p is not None:
+                    new_pointers.append(p)
+                    id = self.value[p]
+                    if id >= 0:
+                        events[id] = events.get(id, 0) + 1
+            pointers = new_pointers
+        return events
+
+
+
