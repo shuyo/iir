@@ -99,7 +99,8 @@ class HMM(object):
 
         alpha = [None] * N
         c = numpy.ones(N)
-        alpha[0] = self.pi * self.B[x[0]]
+        alpha_0 = self.pi * self.B[x[0]]
+        alpha[0] = alpha_0 / alpha_0.sum()
         for n in range(1, N):
             a = self.B[x[n]] * numpy.dot(alpha[n-1], self.A)
             z = a.sum()
@@ -116,9 +117,9 @@ class HMM(object):
 
         # It spends a lot of memory to preserve each xi.
         # xi = [ self.A * numpy.dot(alpha[n-1].T, self.B[x[n]] * beta[n]) / c[n] for n in range(1, N)]
-        xi_sum = numpy.dot(alpha[0].T, self.B[x[1]] * beta[1]) / c[1]
+        xi_sum = numpy.outer(alpha[0], self.B[x[1]] * beta[1]) / c[1]
         for n in range(2, N):
-            xi_sum += numpy.dot(alpha[n-1].T, self.B[x[n]] * beta[n]) / c[n]
+            xi_sum += numpy.outer(alpha[n-1], self.B[x[n]] * beta[n]) / c[n]
         xi_sum *= self.A
 
         return (gamma, xi_sum, likelihood)
