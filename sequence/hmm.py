@@ -97,26 +97,23 @@ class HMM(object):
     def Estep(self, x):
         N = len(x)
 
-        alpha = [None] * N
-        c = numpy.ones(N)
-        alpha_0 = self.pi * self.B[x[0]]
-        alpha[0] = alpha_0 / alpha_0.sum()
-        for n in range(1, N):
+        alpha = numpy.zeros((N, self.K))
+        c = numpy.ones(N)   # c[0] = 1
+        a = self.pi * self.B[x[0]]
+        alpha[0] = a / a.sum()
+        for n in xrange(1, N):
             a = self.B[x[n]] * numpy.dot(alpha[n-1], self.A)
-            z = a.sum()
+            c[n] = z = a.sum()
             alpha[n] = a / z
-            c[n] = z
-        
-        beta = [None] * N
-        beta[N-1] = numpy.ones(self.K)
-        for n in range(N-1, 0, -1):
+
+        beta = numpy.zeros((N, self.K))
+        beta[N-1] = 1
+        for n in xrange(N-1, 0, -1):
             beta[n-1] = numpy.dot(self.A, beta[n] * self.B[x[n]]) / c[n]
 
         likelihood = numpy.log(c).sum()
-        gamma = [a * b for a, b in zip(alpha, beta)]
+        gamma = alpha * beta
 
-        # It spends a lot of memory to preserve each xi.
-        # xi = [ self.A * numpy.dot(alpha[n-1].T, self.B[x[n]] * beta[n]) / c[n] for n in range(1, N)]
         xi_sum = numpy.outer(alpha[0], self.B[x[1]] * beta[1]) / c[1]
         for n in range(2, N):
             xi_sum += numpy.outer(alpha[n-1], self.B[x[n]] * beta[n]) / c[n]
@@ -138,7 +135,7 @@ class HMM(object):
             log_likelihood += likelihood
 
             # M-step
-            pi_new += gamma[1]
+            pi_new += gamma[0]
             A_new += xi_sum
             for v, g_n in zip(x, gamma):
                 B_new[v] += g_n
