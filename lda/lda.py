@@ -91,9 +91,13 @@ def lda_learning(lda, iteration, voca):
     output_word_topic_dist(lda, voca)
 
 def output_word_topic_dist(lda, voca):
+    zcount = numpy.zeros(lda.K, dtype=int)
+    for zlist in lda.z_m_n:
+        for z in zlist:
+            zcount[z] += 1
     phi = lda.worddist()
-    for k in range(lda.K):
-        print "\n-- topic: %d" % k
+    for k in xrange(lda.K):
+        print "\n-- topic: %d (%d words)" % (k, zcount[k])
         for w in numpy.argsort(-phi[k])[:20]:
             print "%s: %f" % (voca[w], phi[k,w])
 
