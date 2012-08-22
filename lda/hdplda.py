@@ -78,7 +78,7 @@ class HDPLDA:
             p_k = numpy.zeros(self.m_k.size)    # topic dist for document 
             for t in self.tables[j]:
                 k = self.k_jt[j][t]
-                p_k[k] += self.n_jt[j][t]
+                p_k[k] += self.n_jt[j][t]       # n_jk
             len_x_alpha = len(x_i) + self.alpha
             p_k /= len_x_alpha
             
@@ -266,7 +266,7 @@ class HDPLDA:
             self.topics.remove(k_old)
 
         # sampling of k
-        n_jtv = self.count_n_jtv(j, t, k_old)
+        n_jtv = self.count_n_jtv(j, t, k_old) # decrement n_kv also in this method
         K = len(self.topics)
         log_p_k = numpy.zeros(K+1)
         for i, k in enumerate(self.topics):
