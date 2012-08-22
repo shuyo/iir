@@ -28,14 +28,11 @@ class LDA_MRM:
         self.L = L
         self.V = V
 
+        self.alpha = alpha
+        self.eta = eta
+
         self.x_ji = docs
         self.labels = labels
-        """
-        self.r_jk = numpy.zeros((M, K), dtype=int)
-        for j, label in enumerate(labels):
-            for k in label:
-                self.r_jk[j, k] = 1
-        """
 
         self.n_jt = numpy.zeros((M, T)) + alpha
         self.n_klv = numpy.zeros((K, L, V)) + beta
@@ -63,13 +60,10 @@ class LDA_MRM:
                 self.n_kl[self.k_jt[j, t], self.l_jt[j, t]] += 1
             self.t_ji.append(numpy.array(t_i))
 
-        print self.k_jt, self.l_jt, self.m_kl
-
     def sampling_kl(self, j, t):
         k_old = self.k_jt[j, t]
         l_old = self.l_jt[j, t]
 
-        print j, t, self.k_jt, self.l_jt, self.m_kl
         self.m_kl[k_old, l_old] -= 1
         self.m_jk[j, k_old] -= 1
         assert (self.m_kl >= 0).all()
@@ -98,8 +92,6 @@ class LDA_MRM:
         log_p_kl = numpy.log(self.m_jk[j, label][:,numpy.newaxis] * self.m_kl[label, :]) + log_f_kl
         assert log_p_kl.shape == (len(label), self.L)
         p_kl = numpy.exp(log_p_kl.flatten() - log_p_kl.max())
-        print self.m_jk, self.m_kl
-        print label, log_p_kl, p_kl
         assert numpy.isfinite(log_p_kl).all()
         kl_new = numpy.random.multinomial(1, p_kl / p_kl.sum()).argmax()
         k_new = label[kl_new / self.L]
@@ -133,14 +125,6 @@ class LDA_MRM:
         self.n_klv[self.k_jt[j, t_new], self.l_jt[j, t_new], v] += 1
         self.n_kl[self.k_jt[j, t_new], self.l_jt[j, t_new]] += 1
 
-        """
-        if t_old != t_new:
-            self.m_jk[j, self.k_jt[j, t_old]] -= 1
-            self.m_jk[j, self.k_jt[j, t_new]] += 1
-            self.m_kl[self.k_jt[j, t_old], self.l_jt[j, t_old]] -= 1
-            self.m_kl[self.k_jt[j, t_new], self.l_jt[j, t_new]] += 1
-        """
-
     def inference(self):
         """ one iteration of inference """
         for j in xrange(self.M):
@@ -149,15 +133,25 @@ class LDA_MRM:
             for t in xrange(self.T):
                 self.sampling_kl(j, t)
 
-    def likelihood(self):
-        pass
+    def perplexity(self):
+        theta_jk = (self.m_jk - self.eta) * self.alpha
+        for t in xrange(self.T):
+            for j in xrange(self.M):
+                theta_jk[j, self.k_jt[j, t]] += self.n_jt[j, t]
+        theta_jk /= theta_jk.sum(axis=1)[:, numpy.newaxis]
+        theta_kl = self.m_kl / self.m_kl.sum(axis=1)[:, numpy.newaxis]
 
-def learning(model, iteration):
-    for i in range(iteration):
-        print "-%d K=%d p=%f" % (i + 1, len(model.topics), model.perplexity())
-        model.inference()
-    print "K=%d perplexity=%f" % (len(model.topics), model.perplexity())
-    return model
+        phi_klv = self.n_klv / self.n_kl[:,:,numpy.newaxis]
+
+        log_p = 0
+        N = 0
+        for j in xrange(self.M):
+            for i in xrange(len(self.x_ji[j])):
+                v = self.x_ji[j][i]
+                log_p -= numpy.log((theta_jk[j] * (theta_kl * phi_klv[:,:,v]).sum(axis=1)).sum())
+            N += len(self.x_ji[j])
+        return numpy.exp(log_p / N)
+
 
 def main():
     import optparse
@@ -168,7 +162,7 @@ def main():
     parser.add_option("--beta", dest="beta", type="float", help="parameter of base measure H", default=0.001)
     parser.add_option("--gamma", dest="gamma", type="float", help="parameter gamma", default=0.1)
     parser.add_option("--eta", dest="eta", type="float", help="parameter eta", default=0.1)
-    parser.add_option("-l", dest="L", type="int", help="number of topics", default=20)
+    parser.add_option("-l", dest="L", type="int", help="number of topics for each label", default=20)
     parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=10)
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
     parser.add_option("--df", dest="df", type="int", help="threshold of document freaquency to cut words", default=0)
@@ -176,7 +170,6 @@ def main():
     if not (options.filename or options.corpus): parser.error("need corpus filename(-f) or corpus range(-c)")
     if options.seed != None:
         numpy.random.seed(options.seed)
-
 
 
 if __name__ == "__main__":
