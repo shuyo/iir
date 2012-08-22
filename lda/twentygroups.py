@@ -23,22 +23,19 @@ def readTerms(target):
 
 class Loader:
     def __init__(self, dirpath, freq_threshold=1, docs_threshold_each_label=100, includes_stopwords=False):
-        self.resourcenames = []
-        self.labels = []
-        self.label2id = dict()
-        self.docs = []
-        self.doclabelids = []
-        self.vocabulary = []
-        self.vocabulary2id = dict()
-
         if includes_stopwords:
             stopwords = re.split(r'\s', STOPWORDS)
         else:
             stopwords = []
 
-        dirlist = os.listdir(dirpath)
+        self.resourcenames = []
+        self.labels = []
+        self.label2id = dict()
+        self.doclabelids = []
         vocacount = dict()
         tempdocs = []
+
+        dirlist = os.listdir(dirpath)
         for label in dirlist:
             path = os.path.join(dirpath, label)
             if os.path.isdir(path):
@@ -48,23 +45,30 @@ class Loader:
 
                 filelist = os.listdir(path)
                 for i, s in enumerate(filelist):
-                    if i == docs_threshold_each_label: break
+                    if i >= docs_threshold_each_label: break
+
+                    self.resourcenames.append(os.path.join(label, s))
+                    self.doclabelids.append(label_id)
+
                     wordlist = readTerms(os.path.join(path, s))
+                    tempdocs.append(wordlist)
+
                     for w in wordlist:
                         if w in vocacount:
                             vocacount[w] += 1
                         else:
                             vocacount[w] = 1
-                    tempdocs.append(wordlist)
-                    self.resourcenames.append(os.path.join(label, s))
-                    self.doclabelids.append(label_id)
 
+        self.vocabulary = []
+        self.vocabulary2id = dict()
         for w in vocacount:
             if w not in stopwords and vocacount[w] >= freq_threshold:
                 self.vocabulary2id[w] = len(self.vocabulary)
                 self.vocabulary.append(w)
+
+        self.docs = []
         for doc in tempdocs:
-            self.docs.append([self.vocabulary2id[w] for w in wordlist if w in self.vocabulary2id])
+            self.docs.append([self.vocabulary2id[w] for w in doc if w in self.vocabulary2id])
 
 def main():
     import optparse
