@@ -30,11 +30,11 @@ class DP_MRM:
         self.gamma = gamma
         self.eta = eta
 
-        # t ‚Í j ‚É‘Î‚µ‚Ä‰Â•Ï, t=0 ‚Í new table —p
-        # l ‚Í k ‚É‘Î‚µ‚Ä‰Â•Ï, l=0 ‚Í new dish —p
-        # v ‚Í”ÍˆÍŒÅ’è‚¾‚ªƒXƒp[ƒX v = 0, ..., V-1
-        # j ‚Í”ÍˆÍŒÅ’è j = 0, ..., M-1
-        # k ‚Í”ÍˆÍŒÅ’è k = 0, ..., K-1
+        # t ã¯ j ã«å¯¾ã—ã¦å¯å¤‰, t=0 ã¯ new table ç”¨
+        # l ã¯ k ã«å¯¾ã—ã¦å¯å¤‰, l=0 ã¯ new dish ç”¨
+        # v ã¯ç¯„å›²å›ºå®šã ãŒã‚¹ãƒ‘ãƒ¼ã‚¹ v = 0, ..., V-1
+        # j ã¯ç¯„å›²å›ºå®š j = 0, ..., M-1
+        # k ã¯ç¯„å›²å›ºå®š k = 0, ..., K-1
 
         self.using_t = [numpy.array([0], dtype=int) for j in xrange(M)]
         self.using_l = [numpy.array([0], dtype=int) for j in xrange(K)]
@@ -100,11 +100,11 @@ class DP_MRM:
         return prob / (self.m_jk[j].sum() + self.K * self.eta)
 
     def insert_table(self, j):
-        """V‚µ‚¢ƒe[ƒuƒ‹‚ğ’Ç‰Á‚·‚éˆ—B’Ç‰Á‚³‚ê‚½ƒe[ƒuƒ‹id‚ğ•Ô‚·"""
+        """æ–°ã—ã„ãƒ†ãƒ¼ãƒ–ãƒ«ã‚’è¿½åŠ ã™ã‚‹å‡¦ç†ã€‚è¿½åŠ ã•ã‚ŒãŸãƒ†ãƒ¼ãƒ–ãƒ«idã‚’è¿”ã™"""
         pass
 
     def remove_table(self, j, t):
-        """’…ÈÒ‚ª‚¢‚È‚­‚È‚èƒe[ƒuƒ‹‚ª–³‚­‚È‚é‚Æ‚«‚Ìˆ—"""
+        """ç€å¸­è€…ãŒã„ãªããªã‚Šãƒ†ãƒ¼ãƒ–ãƒ«ãŒç„¡ããªã‚‹ã¨ãã®å‡¦ç†"""
         pass
 
 
