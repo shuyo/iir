@@ -13,15 +13,16 @@ numpy.seterr(all='raise')
 from scipy.special import gammaln
 
 class LDA_MRM:
-    """
-        docs : [[word_id, ...], ...]
-        labels : list of multiple labels of documents [[label_id, ...], ...]
-        T : number of "tables" for each document (= number of topics corresponging to a document directly)
-        L : number of phis(=topic-word distributions) for each label
-            amount of topics = K * L,  where K : number of labels
-        V : vocabulary size
-    """
     def __init__(self, docs, labels, T, L, V, alpha, beta, gamma, eta):
+        """
+            docs : [[word_id, ...], ...]
+            labels : list of multiple labels of documents [[label_id, ...], ...]
+            T : number of "tables" for each document (= number of topics corresponging to a document directly)
+            L : number of phis(=topic-word distributions) for each label
+                amount of topics = K * L,  where K : number of labels
+            V : vocabulary size
+        """
+
         self.M = M = len(docs)
         self.K = K = max(max(l) for l in labels) + 1
         self.T = T
@@ -35,7 +36,7 @@ class LDA_MRM:
         self.labels = labels
 
         self.n_jt = numpy.zeros((M, T)) + alpha
-        self.n_klv = numpy.zeros((K, L, V)) + beta
+        self.n_klv = numpy.zeros((K, L, V)) + beta # too large ...
         self.n_kl = numpy.zeros((K, L)) + V * beta
         self.m_jk = numpy.zeros((M, K)) + eta
         self.m_kl = numpy.zeros((K, L)) + gamma # gamma_k[:, numpy.newaxis]
