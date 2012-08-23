@@ -9,11 +9,18 @@
 import os, codecs, re
 
 STOPWORDS = """
-the of in a and have to it was i or were this that with is some on for
-how you if s would com be your my one not never then take for b an can
-but aaa when as out t just from does they back up she those who their
-her do by must u what there at very are am much way all any other e me
-something someone doesn false
+a b c d e f g h i j k l m n o p q r s t u v w x y z
+the of in and have to it was or were this that with is some on for so
+how you if would com be your my one not never then take for an can no
+but aaa when as out just from does they back up she those who another
+her do by must what there at very are am much way all any other me he
+something someone doesn his also its has into us him than about their
+may too will had been we them why did being over without these could
+out which only should even well more where after while anyone our now
+such under two ten else always going either each however non let done
+ever between anything before every same since because quite sure here
+nothing new don off still down yes around few many own
+go get know think like make say see look use said
 """
 
 def readTerms(target):
@@ -24,7 +31,7 @@ def readTerms(target):
 class Loader:
     def __init__(self, dirpath, freq_threshold=1, docs_threshold_each_label=100, includes_stopwords=False):
         if includes_stopwords:
-            stopwords = re.split(r'\s', STOPWORDS)
+            stopwords = set(re.split(r'\s', STOPWORDS))
         else:
             stopwords = []
 
@@ -74,14 +81,15 @@ def main():
     import optparse
     parser = optparse.OptionParser()
     parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha", default=0.1)
-    parser.add_option("--beta", dest="beta", type="float", help="parameter beta", default=0.01)
+    parser.add_option("--beta", dest="beta", type="float", help="parameter beta", default=0.001)
     parser.add_option("-k", dest="K", type="int", help="number of topics", default=10)
     parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=20)
     parser.add_option("--word_freq_threshold", dest="word_freq_threshold", type="int", default=3)
     parser.add_option("--docs_threshold_each_label", dest="docs_threshold_each_label", type="int", default=100)
+    parser.add_option("-d", dest="dir", help="directory of 20-newsgroups dataset", default="./20groups/mini_newsgroups/")
     (options, args) = parser.parse_args()
 
-    corpus = Loader("./20groups/mini_newsgroups/", options.word_freq_threshold, options.docs_threshold_each_label, True)
+    corpus = Loader(options.dir, options.word_freq_threshold, options.docs_threshold_each_label, True)
     V = len(corpus.vocabulary)
 
     import lda
