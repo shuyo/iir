@@ -92,14 +92,20 @@ def lda_learning(lda, iteration, voca):
 
 def output_word_topic_dist(lda, voca):
     zcount = numpy.zeros(lda.K, dtype=int)
-    for zlist in lda.z_m_n:
-        for z in zlist:
+    wordcount = [dict() for k in xrange(lda.K)]
+    for xlist, zlist in zip(lda.docs, lda.z_m_n):
+        for x, z in zip(xlist, zlist):
             zcount[z] += 1
+            if x in wordcount[z]:
+                wordcount[z][x] += 1
+            else:
+                wordcount[z][x] = 1
+
     phi = lda.worddist()
     for k in xrange(lda.K):
         print "\n-- topic: %d (%d words)" % (k, zcount[k])
         for w in numpy.argsort(-phi[k])[:20]:
-            print "%s: %f" % (voca[w], phi[k,w])
+            print "%s: %f (%d)" % (voca[w], phi[k,w], wordcount[k].get(w,0))
 
 def main():
     import optparse
