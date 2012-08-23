@@ -36,16 +36,21 @@ c1 = NaiveCounting()
 c2 = SpaceSaving(1000)
 c3 = SpaceSaving(100)
 
+n = 0
 for m in re.finditer(r'[A-Za-z]+', text):
     word = m.group(0).lower()
     c1.add(word)
     c2.add(word)
     c3.add(word)
+    n += 1
+
+print "total words = %d" % n
 
 words = c1.map.items()
 words.sort(key=lambda x:(-x[1], x[0]))
 m2 = c2.map
 m3 = c3.map
 for i, x in enumerate(words):
-    print "%d\t%s\t%d\t%d\t%d" % (i, x[0], x[1], m2.get(x[0],0), m3.get(x[0],0))
+    print "%d\t%s\t%d\t%d\t%d" % (i+1, x[0], x[1], m2.get(x[0],0), m3.get(x[0],0))
+
 
