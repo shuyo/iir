@@ -16,8 +16,8 @@ class DP_MRM:
             docs : [[word_id, ...], ...]
             labels : list of multiple labels of documents [[label_id, ...], ...]
             T : number of "tables" for each document (= number of topics corresponging to a document directly)
-            L : number of phis(=topic-word distributions) for each label
-                amount of topics = K * L,  where K : number of labels
+            L : number of dishes(=topic-word distributions) for each label
+                amount of topics = K * L,  where K is number of labels
             V : vocabulary size
         """
 
@@ -30,11 +30,11 @@ class DP_MRM:
         self.gamma = gamma
         self.eta = eta
 
-        # t は j に対して可変, t=0 は new table 用
-        # l は k に対して可変, l=0 は new dish 用
-        # v は範囲固定だがスパース v = 0, ..., V-1
-        # j は範囲固定 j = 0, ..., M-1
-        # k は範囲固定 k = 0, ..., K-1
+        # t is table index for document j, t=0 means a new table
+        # l is dish index for label k, l=0 means anew dish
+        # v is word id and very sparse, v = 0, ..., V-1
+        # j is document index, j = 0, ..., M-1
+        # k is label index, k = 0, ..., K-1
 
         self.using_t = [numpy.array([0], dtype=int) for j in xrange(M)]
         self.using_l = [numpy.array([0], dtype=int) for j in xrange(K)]
@@ -54,8 +54,7 @@ class DP_MRM:
         assert t_old > 0
         assert t_old in self.using_t[j]
 
-        k = self.k_jt[j][t_old]
-        l = self.l_jt[j][t_old]
+        k, l = self.kl_jt[j][t_old]
         assert l > 0
         assert l in self.using_l[k]
 
@@ -81,8 +80,7 @@ class DP_MRM:
         self.t_ji[j][i] = t_new
         self.n_jt[j][t_new] += 1
 
-        k = self.k_jt[j][t_new]
-        l = self.l_jt[j][t_new]
+        k,l = self.kl_jt[j][t_new]
         if v in self.n_klv[k][l]:
             self.n_klv[k][l][v] += 1
         else:
@@ -100,7 +98,23 @@ class DP_MRM:
         return prob / (self.m_jk[j].sum() + self.K * self.eta)
 
     def insert_table(self, j):
-        """新しいテーブルを追加する処理。追加されたテーブルidを返す"""
+        """新しいテーブルを追加する。追加されたテーブルidを返す"""
+        if self.using_t[j][-1] + 1 == len(self.using_t[j]):
+            # expand tables and use the last one
+            t_new = len(self.using_t[j])
+            self.using_t[j].append(t_new)
+            self.n_jt[j].resize(t_new + 1)
+            self.kl_jt[j].resize(t_new + 1)
+        else:
+            # reuse the removed table
+            for t_new, t in enumerate(self.using_t[j]):
+                if t_new != t: break
+            self.using_t[j].insert(t_new, t_new)
+
+        self.n_jt[j][t_new] = 0  # to make sure
+        self.kl_jt[j][t_new] = self.sampling_kl_for_new_table(j)
+
+    def sampling_kl_for_new_table(self, j):
         pass
 
     def remove_table(self, j, t):
