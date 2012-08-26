@@ -29,10 +29,14 @@ class HDPLDA:
         self.n_jt = [numpy.array([0] ,dtype=int) for x_i in docs]           # number of terms for each document and table
 
         self.m_k = numpy.array([0] ,dtype=int)  # number of tables for each topic
-        self.n_k = numpy.array([0] ,dtype=int)  # number of terms for each topic
-        self.n_kv = [dict()]                    # number of terms for each topic and vocabulary
+        self.n_k = numpy.array([self.beta / self.V]) # number of terms for each topic ( + beta / V )
+        self.n_kv = [dict()]                    # number of terms for each topic and vocabulary ( + beta )
 
-        #self.t_ji = [numpy.zeros(len(x_i), dtype=int) - 1 for x_i in docs] # table for each document and term (without assignment)
+        # table for each document and term (without assignment)
+        self.t_ji = [numpy.zeros(len(x_i), dtype=int) - 1 for x_i in docs] 
+        for j, x_i in enumerate(docs):
+            for i, v in enumerate(x_i):
+                self.sampling_t(j, i)
 
     def inference(self):
         for j, x_i in enumerate(self.x_ji):
@@ -78,46 +82,33 @@ class HDPLDA:
         print "n_k:", self.n_k
         print "m_k:", self.m_k
 
+    def remove_table(self, j, t, k):
+        """remove the table where all guests are gone"""
+        self.using_t[j].remove(t)
+        self.m_k[k] -= 1
+        if self.m_k[k] == 0:
+            # remove topic (dish) where all tables are gone
+            self.using_k.remove(k)
 
     # sampling t (table) from posterior
-    def sampling_table(self, j, i):
+    def sampling_t(self, j, i):
         v = self.x_ji[j][i]
-        tables = self.tables[j]
         t_old = self.t_ji[j][i]
-        if t_old >=0:
-            k_old = self.k_jt[j][t_old]
+        if t_old  > 0:
+            k = self.k_jt[j][t_old]
 
             # decrease counters
-            self.n_kv[k_old, v] -= 1
-            self.n_k[k_old] -= 1
+            self.n_kv[k][v] -= 1
+            self.n_k[k] -= 1
             self.n_jt[j][t_old] -= 1
 
-            if self.n_jt[j][t_old]==0:
-                # table that all guests are gone
-                tables.remove(t_old)
-                self.m_k[k_old] -= 1
-                self.n_tables -= 1
-                self.updated_n_tables()
-
-                if self.m_k[k_old] == 0:
-                    # topic (dish) that all guests are gone
-                    self.topics.remove(k_old)
+            if self.n_jt[j][t_old] == 0:
+                self.remove_table(j, t_old, k)
 
         # sampling from posterior p(t_ji=t)
-        t_new = self.sampling_t(j, i, v, tables)
-
-        # increase counters
-        self.t_ji[j][i] = t_new
-        self.n_jt[j][t_new] += 1
-
-        k_new = self.k_jt[j][t_new]
-        self.n_k[k_new] += 1
-        self.n_kv[k_new, v] += 1
-
-    def sampling_t(self, j, i, v, tables):
-        f_k = (self.n_kv[:, v] + self.beta) / (self.n_k + self.Vbeta)
-        p_t = [self.n_jt[j][t] * f_k[self.k_jt[j][t]] for t in tables]
-        p_x_ji = numpy.inner(self.m_k, f_k) + self.gamma_f_k_new_x_ji
+        f_k = [self.n_kv[k].get(v, self.beta) for k in self.using_k] / self.n_k[self.using_k]
+        p_t = self.n_jt[j][self.using_t[j]] * f_k[self.k_jt[j][self.using_t[j]]
+        p_x_ji = numpy.inner(self.m_k[self.using_k], f_k) + self.gamma / self.V
         p_t.append(p_x_ji * self.alpha_over_T_gamma)
 
         p_t = numpy.array(p_t, copy=False)
@@ -127,6 +118,19 @@ class HDPLDA:
             return tables[drawing]
         else:
             return self.new_table(j, i, f_k)
+
+        t_new = self.sampling_t(j, i, v, tables)
+
+        # increase counters
+        self.t_ji[j][i] = t_new
+        self.n_jt[j][t_new] += 1
+
+        k_new = self.k_jt[j][t_new]
+        self.n_k[k_new] += 1
+        if v in self.n_kv[k_new]:
+            self.n_kv[k_new][v] += 1
+        else:
+            self.n_kv[k_new][v] = 1
 
     # Assign guest x_ji to a new table and draw topic (dish) of the table
     def new_table(self, j, i, f_k):
