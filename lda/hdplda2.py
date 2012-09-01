@@ -120,6 +120,8 @@ class HDPLDA:
             return self.new_table(j, i, f_k)
 
         t_new = self.sampling_t(j, i, v, tables)
+        if t_new == 0:
+            t_new = self.add_new_table(j, f_k)
 
         # increase counters
         self.t_ji[j][i] = t_new
@@ -133,30 +135,42 @@ class HDPLDA:
             self.n_kv[k_new][v] = 1
 
     # Assign guest x_ji to a new table and draw topic (dish) of the table
-    def new_table(self, j, i, f_k):
-        # search a spare table ID
-        T_j = self.n_jt[j].size
-        for t_new in range(T_j):
-            if t_new not in self.tables[j]: break
+    def add_new_table(self, j, f_k):
+        for t_new, t in enumerate(self.using_t[j]):
+            if t_new != t: break
         else:
-            # new table ID (no spare)
-            t_new = T_j
+            t_new = len(self.using_t[j])
             self.n_jt[j].resize(t_new+1)
-            self.n_jt[j][t_new] = 0
-            self.k_jt[j].append(0)
-        self.tables[j].append(t_new)
-        self.n_tables += 1
-        self.updated_n_tables()
+            self.k_jt[j].resize(t_new+1)
 
-        # sampling of k for new topic(= dish of new table)
-        p_k = [self.m_k[k] * f_k[k] for k in self.topics]
-        p_k.append(self.gamma_f_k_new_x_ji)
-        k_new = self.sampling_topic(numpy.array(p_k, copy=False))
-
-        self.k_jt[j][t_new] = k_new
+        self.using_t[j].insert(t_new, t_new)
+        self.n_jt[j][t_new] = 0  # to make sure
+        self.k_jt[j][t_new] = k_new = self.sampling_k_for_new_table(j, f_k)
         self.m_k[k_new] += 1
 
-        return t_new
+    def self.sampling_k_for_new_table(j, f_k)
+        # sampling of k for new topic(= dish of new table)
+        p_k = self.m_k[self.using_k] * f_k
+        p_k[0] = self.gamma / self.V
+        k_new = numpy.random.multinomial(1, p_k / p_k.sum()).argmax()
+        if k_kew == 0:
+            k_kew = self.add_new_topic()
+        return k_new
+
+    def add_new_topic(self):
+        for k_new, k in enumerate(self.using_k):
+            if k_new != k: break
+        else:
+            k_new = len(self.using_k)
+            self.n_k = numpy.resize(self.n_k, k_new + 1)
+            self.m_k = numpy.resize(self.m_k, k_new + 1)
+            self.n_kv.append(None)
+
+        self.using_k.insert(k_new, k_new)
+        self.n_k[k_new] = 0
+        self.m_k[k_new] = 0
+        self.n_kv[k_new] = dict()
+
 
     # sampling topic
     # In the case of new topic, allocate resource for parameters
