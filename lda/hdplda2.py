@@ -9,7 +9,7 @@
 import numpy
 
 class HDPLDA:
-    def __init__(self, alpha, gamma, beta, docs, V):
+    def __init__(self, alpha, beta, gamma, docs, V):
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
@@ -20,33 +20,38 @@ class HDPLDA:
         #     t=0 means to draw a new table
         self.using_t = [[0] for j in xrange(self.M)]
 
-        # k : dish index
+        # k : dish(topic) index
         #     k=0 means to draw a new dish
         self.using_k = [0]
 
         self.x_ji = docs # vocabulary for each document and term
-        self.k_jt = [numpy.array([0] ,dtype=int) for j in xrange(self.M)]   # topic for each document and table
-        self.n_jt = [numpy.array([0] ,dtype=int) for x_i in docs]           # number of terms for each document and table
+        self.k_jt = [numpy.zeros(1 ,dtype=int) for j in xrange(self.M)]   # topics of document and table
+        self.n_jt = [numpy.zeros(1 ,dtype=int) for j in xrange(self.M)]   # number of terms for each table of document
 
-        self.m_k = numpy.array([0] ,dtype=int)  # number of tables for each topic
+        self.m_k = numpy.zeros(1 ,dtype=int)  # number of tables for each topic
         self.n_k = numpy.array([self.beta / self.V]) # number of terms for each topic ( + beta / V )
-        self.n_kv = [dict()]                    # number of terms for each topic and vocabulary ( + beta )
+        class AlwaysZero:
+            def get(self, x, y): return 0
+        self.n_kv = [AlwaysZero()]            # number of terms for each topic and vocabulary ( + beta )
 
-        # table for each document and term (without assignment)
+        # table for each document and term (-1 means not-assigned)
         self.t_ji = [numpy.zeros(len(x_i), dtype=int) - 1 for x_i in docs] 
+        """
         for j, x_i in enumerate(docs):
-            for i, v in enumerate(x_i):
+            for i in xrange(len(x_i)):
                 self.sampling_t(j, i)
+        """
 
     def inference(self):
         for j, x_i in enumerate(self.x_ji):
-            for i in range(len(x_i)):
+            for i in xrange(len(x_i)):
                 self.sampling_t(j, i)
             for t in self.tables[j]:
                 self.sampling_k(j, t)
 
     def worddist(self):
-        return [(self.n_kv[k] + self.beta) / (self.n_k[k] + self.Vbeta) for k in self.topics]
+        return None
+        #return [(self.n_kv[k] + self.beta) / (self.n_k[k] + self.Vbeta) for k in self.topics]
 
     def perplexity(self):
         phi = self.worddist()
@@ -82,13 +87,6 @@ class HDPLDA:
         print "n_k:", self.n_k
         print "m_k:", self.m_k
 
-    def remove_table(self, j, t, k):
-        """remove the table where all guests are gone"""
-        self.using_t[j].remove(t)
-        self.m_k[k] -= 1
-        if self.m_k[k] == 0:
-            # remove topic (dish) where all tables are gone
-            self.using_k.remove(k)
 
     # sampling t (table) from posterior
     def sampling_t(self, j, i):
@@ -96,6 +94,7 @@ class HDPLDA:
         t_old = self.t_ji[j][i]
         if t_old  > 0:
             k = self.k_jt[j][t_old]
+            assert k > 0
 
             # decrease counters
             self.n_kv[k][v] -= 1
@@ -106,24 +105,35 @@ class HDPLDA:
                 self.remove_table(j, t_old, k)
 
         # sampling from posterior p(t_ji=t)
-        f_k = [self.n_kv[k].get(v, self.beta) for k in self.using_k] / self.n_k[self.using_k]
-        p_t = self.n_jt[j][self.using_t[j]] * f_k[self.k_jt[j][self.using_t[j]]
-        p_x_ji = numpy.inner(self.m_k[self.using_k], f_k) + self.gamma / self.V
-        p_t.append(p_x_ji * self.alpha_over_T_gamma)
-
-        p_t = numpy.array(p_t, copy=False)
-        p_t /= p_t.sum()
-        drawing = numpy.random.multinomial(1, p_t).argmax()
-        if drawing < len(tables):
-            return tables[drawing]
-        else:
-            return self.new_table(j, i, f_k)
-
-        t_new = self.sampling_t(j, i, v, tables)
+        f_k = self.calc_f_k(v)
+        assert f_k[0] == 0 # f_k[0] is a dummy and will be erased
+        p_t = self.calc_table_posterior(j, f_k)
+        t_new = numpy.random.multinomial(1, p_t).argmax()
         if t_new == 0:
             t_new = self.add_new_table(j, f_k)
 
         # increase counters
+        self.set_table_of_term(j, i, v, t_new)
+
+    def remove_table(self, j, t, k):
+        """remove the table where all guests are gone"""
+        self.using_t[j].remove(t)
+        self.m_k[k] -= 1
+        if self.m_k[k] == 0:
+            # remove topic (dish) where all tables are gone
+            self.using_k.remove(k)
+
+    def calc_f_k(self, v):
+        return [self.n_kv[k].get(v, self.beta) for k in self.using_k] / self.n_k[self.using_k]
+
+    def calc_table_posterior(self, j, f_k):
+        using_t = self.using_t[j]
+        p_t = self.n_jt[j][using_t] * f_k[self.k_jt[j][using_t]]
+        p_x_ji = numpy.inner(self.m_k[self.using_k], f_k) + self.gamma / self.V
+        p_t[0] = p_x_ji * self.alpha / (self.V + len(using_t) - 1)
+        return p_t / p_t.sum()
+
+    def set_table_of_term(self, j, i, v, t_new):
         self.t_ji[j][i] = t_new
         self.n_jt[j][t_new] += 1
 
@@ -132,7 +142,7 @@ class HDPLDA:
         if v in self.n_kv[k_new]:
             self.n_kv[k_new][v] += 1
         else:
-            self.n_kv[k_new][v] = 1
+            self.n_kv[k_new][v] = self.beta + 1
 
     # Assign guest x_ji to a new table and draw topic (dish) of the table
     def add_new_table(self, j, f_k):
@@ -145,16 +155,20 @@ class HDPLDA:
 
         self.using_t[j].insert(t_new, t_new)
         self.n_jt[j][t_new] = 0  # to make sure
-        self.k_jt[j][t_new] = k_new = self.sampling_k_for_new_table(j, f_k)
+
+        k_new = self.sampling_k_for_new_table(j, f_k)
+        self.k_jt[j][t_new] = k_new
         self.m_k[k_new] += 1
 
-    def self.sampling_k_for_new_table(j, f_k)
-        # sampling of k for new topic(= dish of new table)
+        return t_new
+
+    def sampling_k_for_new_table(self, j, f_k):
+        "sampling of k for new topic(= dish of new table)"
         p_k = self.m_k[self.using_k] * f_k
         p_k[0] = self.gamma / self.V
         k_new = numpy.random.multinomial(1, p_k / p_k.sum()).argmax()
-        if k_kew == 0:
-            k_kew = self.add_new_topic()
+        if k_new == 0:
+            k_new = self.add_new_topic()
         return k_new
 
     def add_new_topic(self):
@@ -170,6 +184,7 @@ class HDPLDA:
         self.n_k[k_new] = 0
         self.m_k[k_new] = 0
         self.n_kv[k_new] = dict()
+        return k_new
 
 
     # sampling topic
