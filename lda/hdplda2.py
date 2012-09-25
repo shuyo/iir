@@ -91,34 +91,43 @@ class HDPLDA:
 
     # sampling t (table) from posterior
     def sampling_t(self, j, i):
+        self.leave_from_table(j, i)
+
         v = self.x_ji[j][i]
-        t_old = self.t_ji[j][i]
-        if t_old  > 0:
-            k = self.k_jt[j][t_old]
-            assert k > 0
-
-            # decrease counters
-            self.n_kv[k][v] -= 1
-            self.n_k[k] -= 1
-            self.n_jt[j][t_old] -= 1
-
-            if self.n_jt[j][t_old] == 0:
-                self.remove_table(j, t_old, k)
-
-        # sampling from posterior p(t_ji=t)
         f_k = self.calc_f_k(v)
         assert f_k[0] == 0 # f_k[0] is a dummy and will be erased
+
+        # sampling from posterior p(t_ji=t)
         p_t = self.calc_table_posterior(j, f_k)
         t_new = numpy.random.multinomial(1, p_t).argmax()
         if t_new == 0:
-            k_new = self.sampling_k_for_new_table(f_k)
+            p_k = self.calc_dish_posterior(f_k)
+            k_new = numpy.random.multinomial(1, p_k).argmax()
+            if k_new == 0:
+                k_new = self.add_new_topic()
             t_new = self.add_new_table(j, f_k, k_new)
 
         # increase counters
-        self.set_table_of_term(j, i, v, t_new)
+        self.seat_at_table(j, i, t_new)
 
-    def remove_table(self, j, t, k):
+    def leave_from_table(self, j, i):
+        t = self.t_ji[j][i]
+        if t  > 0:
+            k = self.k_jt[j][t]
+            assert k > 0
+
+            # decrease counters
+            v = self.x_ji[j][i]
+            self.n_kv[k][v] -= 1
+            self.n_k[k] -= 1
+            self.n_jt[j][t] -= 1
+
+            if self.n_jt[j][t] == 0:
+                self.remove_table(j, t)
+
+    def remove_table(self, j, t):
         """remove the table where all guests are gone"""
+        k = self.k_jt[j][t]
         self.using_t[j].remove(t)
         self.m_k[k] -= 1
         self.m -= 1
@@ -136,12 +145,14 @@ class HDPLDA:
         p_t[0] = p_x_ji * self.alpha / (self.gamma + self.m)
         return p_t / p_t.sum()
 
-    def set_table_of_term(self, j, i, v, t_new):
+    def seat_at_table(self, j, i, t_new):
         self.t_ji[j][i] = t_new
         self.n_jt[j][t_new] += 1
 
         k_new = self.k_jt[j][t_new]
         self.n_k[k_new] += 1
+
+        v = self.x_ji[j][i]
         if v in self.n_kv[k_new]:
             self.n_kv[k_new][v] += 1
         else:
@@ -169,14 +180,6 @@ class HDPLDA:
         p_k = self.m_k[self.using_k] * f_k
         p_k[0] = self.gamma / self.V
         return p_k / p_k.sum()
-
-    def sampling_k_for_new_table(self, f_k):
-        "sampling of k for new topic(= dish of new table)"
-        p_k = self.calc_dish_posterior(f_k)
-        k_new = numpy.random.multinomial(1, p_k).argmax()
-        if k_new == 0:
-            k_new = self.add_new_topic()
-        return k_new
 
     def add_new_topic(self):
         for k_new, k in enumerate(self.using_k):
