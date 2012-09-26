@@ -7,6 +7,7 @@
 # (refer to "Hierarchical Dirichlet Processes"(Teh et.al, 2005))
 
 import numpy
+from scipy.special import gammaln
 
 class HDPLDA:
     def __init__(self, alpha, beta, gamma, docs, V):
@@ -27,6 +28,7 @@ class HDPLDA:
         self.x_ji = docs # vocabulary for each document and term
         self.k_jt = [numpy.zeros(1 ,dtype=int) for j in xrange(self.M)]   # topics of document and table
         self.n_jt = [numpy.zeros(1 ,dtype=int) for j in xrange(self.M)]   # number of terms for each table of document
+        self.n_jtv = [[None] for j in xrange(self.M)]
 
         self.m = 0
         self.m_k = numpy.zeros(1 ,dtype=int)  # number of tables for each topic
@@ -37,47 +39,20 @@ class HDPLDA:
 
         # table for each document and term (-1 means not-assigned)
         self.t_ji = [numpy.zeros(len(x_i), dtype=int) - 1 for x_i in docs] 
-        """
-        for j, x_i in enumerate(docs):
-            for i in xrange(len(x_i)):
-                self.sampling_t(j, i)
-        """
 
     def inference(self):
         for j, x_i in enumerate(self.x_ji):
             for i in xrange(len(x_i)):
                 self.sampling_t(j, i)
-            for t in self.tables[j]:
+        for j in xrange(self.M):
+            for t in self.using_t[j]:
                 self.sampling_k(j, t)
 
     def worddist(self):
         return None
-        #return [(self.n_kv[k] + self.beta) / (self.n_k[k] + self.Vbeta) for k in self.topics]
 
     def perplexity(self):
-        phi = self.worddist()
-        phi.append(numpy.zeros(self.V) + 1.0 / self.V)
-        log_per = 0
-        N = 0
-        gamma_over_T_gamma = self.gamma / (self.n_tables + self.gamma)
-        for j, x_i in enumerate(self.x_ji):
-            p_k = numpy.zeros(self.m_k.size)    # topic dist for document 
-            for t in self.tables[j]:
-                k = self.k_jt[j][t]
-                p_k[k] += self.n_jt[j][t]
-            len_x_alpha = len(x_i) + self.alpha
-            p_k /= len_x_alpha
-            
-            p_k_parent = self.alpha / len_x_alpha
-            p_k += p_k_parent * (self.m_k / (self.n_tables + self.gamma))
-            
-            theta = [p_k[k] for k in self.topics]
-            theta.append(p_k_parent * gamma_over_T_gamma)
-
-            for v in x_i:
-                log_per -= numpy.log(numpy.inner([p[v] for p in phi], theta))
-            N += len(x_i)
-        return numpy.exp(log_per / N)
+        return None
 
     def dump(self, disp_x=False):
         if disp_x: print "x_ji:", self.x_ji
@@ -99,9 +74,9 @@ class HDPLDA:
 
         # sampling from posterior p(t_ji=t)
         p_t = self.calc_table_posterior(j, f_k)
-        t_new = numpy.random.multinomial(1, p_t).argmax()
+        t_new = self.using_t[j][numpy.random.multinomial(1, p_t).argmax()]
         if t_new == 0:
-            p_k = self.calc_dish_posterior(f_k)
+            p_k = self.calc_dish_posterior_w(f_k)
             k_new = numpy.random.multinomial(1, p_k).argmax()
             if k_new == 0:
                 k_new = self.add_new_topic()
@@ -121,6 +96,7 @@ class HDPLDA:
             self.n_kv[k][v] -= 1
             self.n_k[k] -= 1
             self.n_jt[j][t] -= 1
+            self.n_jtv[j][t][v] -= 1
 
             if self.n_jt[j][t] == 0:
                 self.remove_table(j, t)
@@ -157,6 +133,10 @@ class HDPLDA:
             self.n_kv[k_new][v] += 1
         else:
             self.n_kv[k_new][v] = self.beta + 1
+        if v in self.n_jtv[j][t_new]:
+            self.n_jtv[j][t_new][v] += 1
+        else:
+            self.n_jtv[j][t_new][v] = 1
 
     # Assign guest x_ji to a new table and draw topic (dish) of the table
     def add_new_table(self, j, f_k, k_new):
@@ -166,9 +146,11 @@ class HDPLDA:
             t_new = len(self.using_t[j])
             self.n_jt[j].resize(t_new+1)
             self.k_jt[j].resize(t_new+1)
+            self.n_jtv[j].append(None)
 
         self.using_t[j].insert(t_new, t_new)
         self.n_jt[j][t_new] = 0  # to make sure
+        self.n_jtv[j][t_new] = dict()
 
         self.k_jt[j][t_new] = k_new
         self.m_k[k_new] += 1
@@ -176,12 +158,78 @@ class HDPLDA:
 
         return t_new
 
-    def calc_dish_posterior(self, f_k):
+    def calc_dish_posterior_w(self, f_k):
+        "calculate dish(topic) posterior when one word is removed"
         p_k = self.m_k[self.using_k] * f_k
         p_k[0] = self.gamma / self.V
         return p_k / p_k.sum()
 
+
+
+
+    def sampling_k(self, j, t):
+        """sampling k (dish=topic) from posterior"""
+
+        self.leave_from_dish(j, t)
+
+        k_old = self.k_jt[j][t]     # it may be zero (means a removed dish)
+
+        Vbeta = self.V * self.beta
+        n_k = self.n_k + Vbeta
+        n_jt = self.n_jt[j][t]
+        n_k[k_old] -= n_jt
+        log_p_k = numpy.log(self.m_k) + gammaln(n_k) + gammaln(n_k + n_jt)
+        log_p_k_new = numpy.log(self.gamma) + gammaln(Vbeta) - gammaln(Vbeta + n_jt)
+
+        n_jtv = self.n_jtv[j][t]
+        gammaln_beta = gammaln(self.beta)
+        for w, n_jtw in n_jtv.iteritems():
+            assert n_jtw >= 0
+            if n_jtw == 0: continue
+            n_kw = numpy.array([n.get(w, 0) for n in self.n_kv]) + self.beta
+            n_kw[k_old] -= n_jtw
+            log_p_k += gammaln(n_kw + n_jtw) - gammaln(n_kw)
+            log_p_k_new += gammaln(self.beta + n_jtw) - gammaln_beta
+        log_p_k[0] = log_p_k_new
+        log_p_k = log_p_k[self.using_k]
+        p_k = numpy.exp(log_p_k - log_p_k.max())
+        p_k /= p_k.sum()
+
+        # sampling of k
+        k_new = self.using_k[numpy.random.multinomial(1, p_k).argmax()]
+
+        # update counters
+        if k_new == 0:
+            k_new = self.add_new_topic()
+            self.m_k[k_new] += 1
+
+        if k_new != k_old:
+            self.m_k[k_new] += 1
+            self.k_jt[j][t] = k_new
+
+            if k_old != 0: self.n_k[k_old] -= n_jt
+            self.n_k[k_new] += n_jt
+            for v, n in self.n_jtv.iteritems():
+                if k_old != 0: self.n_kv[k_old][v] -= n
+                self.n_kv[k_new][v] += n
+
+    def leave_from_dish(self, j, t):
+        """
+        This makes the table leave from its dish and only the table counter decrease.
+        The word counters (n_k and n_kv) stay.
+        """
+        k = self.k_jt[j][t]
+        assert k > 0
+        self.m_k[k] -= 1
+        if self.m_k[k] == 0:
+            self.using_k.remove(k)
+            self.k_jt[j][t] = 0
+
+
+
     def add_new_topic(self):
+
+        "This is commonly used by sampling_t and sampling_k."
         for k_new, k in enumerate(self.using_k):
             if k_new != k: break
         else:
@@ -196,57 +244,6 @@ class HDPLDA:
         self.n_kv[k_new] = dict()
         return k_new
 
-
-    # sampling topic
-    # In the case of new topic, allocate resource for parameters
-    def sampling_topic(self, p_k):
-        drawing = numpy.random.multinomial(1, p_k / p_k.sum()).argmax()
-        if drawing < len(self.topics):
-            # existing topic
-            k_new = self.topics[drawing]
-        else:
-            # new topic
-            K = self.m_k.size
-            for k_new in range(K):
-                # recycle table ID, if a spare ID exists
-                if k_new not in self.topics: break
-            else:
-                # new table ID, if otherwise
-                k_new = K
-                self.n_k = numpy.resize(self.n_k, k_new + 1)
-                self.n_k[k_new] = 0
-                self.m_k = numpy.resize(self.m_k, k_new + 1)
-                self.m_k[k_new] = 0
-                self.n_kv = numpy.resize(self.n_kv, (k_new+1, self.V))
-                self.n_kv[k_new, :] = numpy.zeros(self.V, dtype=int)
-            self.topics.append(k_new)
-        return k_new
-
-    def sampling_k(self, j, t):
-        """sampling k (dish=topic) from posterior"""
-        k_old = self.k_jt[j][t]
-        n_jt = self.n_jt[j][t]
-        self.m_k[k_old] -= 1
-        self.n_k[k_old] -= n_jt
-        if self.m_k[k_old] == 0:
-            self.topics.remove(k_old)
-
-        # sampling of k
-        n_jtv = self.count_n_jtv(j, t, k_old)
-        K = len(self.topics)
-        log_p_k = numpy.zeros(K+1)
-        for i, k in enumerate(self.topics):
-            log_p_k[i] = self.log_f_k_new_x_jt(n_jt, n_jtv, self.n_kv[k, :], self.n_k[k]) + numpy.log(self.m_k[k])
-        log_p_k[K] = self.log_f_k_new_x_jt(n_jt, n_jtv) + numpy.log(self.gamma)
-        k_new = self.sampling_topic(numpy.exp(log_p_k - log_p_k.max())) # for too small
-
-        # update counters
-        self.k_jt[j][t] = k_new
-        self.m_k[k_new] += 1
-        self.n_k[k_new] += self.n_jt[j][t]
-        for v, t1 in zip(self.x_ji[j], self.t_ji[j]):
-            if t1 != t: continue
-            self.n_kv[k_new, v] += 1
 
 
 def hdplda_learning(hdplda, iteration):
