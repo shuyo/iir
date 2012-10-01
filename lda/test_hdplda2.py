@@ -16,13 +16,6 @@ class TestHDPLDA(unittest.TestCase):
         self.sequence3(0.2, 0.01, 0.5)
         pass
 
-    def test3(self):
-        self.sequence_random(0.2, 0.01, 0.5, 0)
-        self.sequence_random(0.2, 0.01, 0.01, 6)
-        self.sequence_random(0.2, 0.01, 0.5, 2)
-        self.sequence_random(0.01, 0.001, 0.05, 13)
-        pass
-
     def test5(self):
         self.sequence4(0.2, 0.01, 0.5)
         pass
@@ -33,6 +26,13 @@ class TestHDPLDA(unittest.TestCase):
     def test8(self):
         self.sequence2(0.01, 0.001, 0.05)
 
+
+    def test_random_sequences(self):
+        self.sequence_random(0.2, 0.01, 0.5, 0)
+        self.sequence_random(0.2, 0.01, 0.01, 6)
+        self.sequence_random(0.2, 0.01, 0.5, 2)
+        self.sequence_random(0.01, 0.001, 0.05, 13)
+        pass
 
 
     def sequence_random(self, alpha, beta, gamma, seed):
@@ -76,28 +76,23 @@ class TestHDPLDA(unittest.TestCase):
         model.seat_at_table(j, 2, t2)
         model.seat_at_table(j, 3, t2)
 
-        #model.dump()
 
         model.leave_from_dish(2, 1)
         model.seat_at_dish(2, 1, 2)
 
-        #model.dump()
 
         model.leave_from_table(2, 0)
         model.seat_at_table(2, 0, 2)
 
-        #model.dump()
 
         model.leave_from_dish(0, 1)
         model.seat_at_dish(0, 1, 2)
-        #model.dump()
         self.assertEqual(model.m, 5)
         self.assertEqual(model.m_k[1], 1)
         self.assertEqual(model.m_k[2], 4)
 
         model.leave_from_dish(1, 1)
         model.seat_at_dish(1, 1, 2)
-        #model.dump()
 
         model.leave_from_table(2, 3)
         k_new = model.add_new_dish()
@@ -108,9 +103,9 @@ class TestHDPLDA(unittest.TestCase):
 
         #model.dump()
         #using_t: [[0, 1, 2], [0, 1, 2], [0, 1, 2]]
-        #t_ji: [array([1, 2, 2, 2]), array([2, 2, 1, 2]), array([2, 2, 2, 1])]
+        #t_ji: [[1, 2, 2, 2], [2, 2, 1, 2], [2, 2, 2, 1]]
         #using_k: [0, 1, 2]
-        #k_jt: [array([0, 2, 2]), array([0, 2, 2]), array([0, 1, 2])]
+        #k_jt: [[0, 2, 2], [0, 2, 2], [0, 1, 2]]
 
         j = 0
         t = 1
