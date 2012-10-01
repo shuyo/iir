@@ -46,7 +46,7 @@ class HDPLDA:
                 self.sampling_t(j, i)
         for j in xrange(self.M):
             for t in self.using_t[j]:
-                self.sampling_k(j, t)
+                if t != 0: self.sampling_k(j, t)
 
     def worddist(self):
         return None
@@ -209,9 +209,12 @@ class HDPLDA:
 
             if k_old != 0: self.n_k[k_old] -= n_jt
             self.n_k[k_new] += n_jt
-            for v, n in self.n_jtv.iteritems():
+            for v, n in n_jtv.iteritems():
                 if k_old != 0: self.n_kv[k_old][v] -= n
-                self.n_kv[k_new][v] += n
+                if v in self.n_kv[k_new]:
+                    self.n_kv[k_new][v] += n
+                else:
+                    self.n_kv[k_new][v] = self.beta + n
 
     def leave_from_dish(self, j, t):
         """
@@ -226,9 +229,7 @@ class HDPLDA:
             self.k_jt[j][t] = 0
 
 
-
     def add_new_topic(self):
-
         "This is commonly used by sampling_t and sampling_k."
         for k_new, k in enumerate(self.using_k):
             if k_new != k: break
