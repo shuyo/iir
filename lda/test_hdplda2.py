@@ -2,11 +2,214 @@
 # -*- coding: utf-8 -*-
 
 import unittest
+import numpy
 import hdplda2
 
 class TestHDPLDA(unittest.TestCase):
     def test1(self):
-        alpha = beta = gamma = 0.1
+        self.sequence1(0.1, 0.1, 0.1)
+
+    def test2(self):
+        self.sequence1(0.2, 0.01, 0.5)
+
+    def test4(self):
+        self.sequence3(0.2, 0.01, 0.5)
+        pass
+
+    def test3(self):
+        self.sequence_random(0.2, 0.01, 0.5, 0)
+        self.sequence_random(0.2, 0.01, 0.01, 6)
+        self.sequence_random(0.2, 0.01, 0.5, 2)
+        self.sequence_random(0.01, 0.001, 0.05, 13)
+        pass
+
+    def test5(self):
+        self.sequence4(0.2, 0.01, 0.5)
+        pass
+
+    def test7(self):
+        self.sequence2(0.01, 0.001, 10)
+
+    def test8(self):
+        self.sequence2(0.01, 0.001, 0.05)
+
+
+
+    def sequence_random(self, alpha, beta, gamma, seed):
+        numpy.random.seed(seed)
+        docs = [[0,1,2,3], [0,1,4,5], [0,1,5,6]]
+        V = 7
+        model = hdplda2.HDPLDA(alpha, beta, gamma, docs, V)
+        for i in xrange(10):
+            model.inference()
+
+    def sequence4(self, alpha, beta, gamma):
+        print "sequence4"
+        docs = [[0,1,2,3], [0,1,4,5], [0,1,5,6]]
+        V = 7
+        model = hdplda2.HDPLDA(alpha, beta, gamma, docs, V)
+
+        k1 = model.add_new_dish()
+        k2 = model.add_new_dish()
+
+        j = 0
+        t1 = model.add_new_table(j, k1)
+        t2 = model.add_new_table(j, k2)
+        model.seat_at_table(j, 0, t1)
+        model.seat_at_table(j, 1, t2)
+        model.seat_at_table(j, 2, t2)
+        model.seat_at_table(j, 3, t2)
+
+        j = 1
+        t1 = model.add_new_table(j, k1)
+        t2 = model.add_new_table(j, k2)
+        model.seat_at_table(j, 0, t2)
+        model.seat_at_table(j, 1, t2)
+        model.seat_at_table(j, 2, t1)
+        model.seat_at_table(j, 3, t2)
+
+        j = 2
+        t1 = model.add_new_table(j, k1)
+        t2 = model.add_new_table(j, k2)
+        model.seat_at_table(j, 0, t1)
+        model.seat_at_table(j, 1, t2)
+        model.seat_at_table(j, 2, t2)
+        model.seat_at_table(j, 3, t2)
+
+        #model.dump()
+
+        model.leave_from_dish(2, 1)
+        model.seat_at_dish(2, 1, 2)
+
+        #model.dump()
+
+        model.leave_from_table(2, 0)
+        model.seat_at_table(2, 0, 2)
+
+        #model.dump()
+
+        model.leave_from_dish(0, 1)
+        model.seat_at_dish(0, 1, 2)
+        #model.dump()
+        self.assertEqual(model.m, 5)
+        self.assertEqual(model.m_k[1], 1)
+        self.assertEqual(model.m_k[2], 4)
+
+        model.leave_from_dish(1, 1)
+        model.seat_at_dish(1, 1, 2)
+        #model.dump()
+
+        model.leave_from_table(2, 3)
+        k_new = model.add_new_dish()
+        self.assertEqual(k_new, 1)
+        t_new = model.add_new_table(j, k_new)
+        self.assertEqual(t_new, 1)
+        model.seat_at_table(2, 3, 1)
+
+        #model.dump()
+        #using_t: [[0, 1, 2], [0, 1, 2], [0, 1, 2]]
+        #t_ji: [array([1, 2, 2, 2]), array([2, 2, 1, 2]), array([2, 2, 2, 1])]
+        #using_k: [0, 1, 2]
+        #k_jt: [array([0, 2, 2]), array([0, 2, 2]), array([0, 1, 2])]
+
+        j = 0
+        t = 1
+        model.leave_from_dish(j, t)
+
+        #print "n_jt=", model.n_jt[j][t]
+
+        p_k = model.calc_dish_posterior_t(j, t)
+        print "p_k=", p_k
+        p0 = gamma / V
+        p1 = 1 * beta / (V * beta + 1)
+        p2 = 4 * (beta + 2) / (V * beta + 10)
+        print "[p0, p1, p2]=", [p0, p1, p2]
+        self.assertAlmostEqual(p_k[0], p0 / (p0 + p1 + p2))
+        self.assertAlmostEqual(p_k[1], p1 / (p0 + p1 + p2))
+        self.assertAlmostEqual(p_k[2], p2 / (p0 + p1 + p2))
+
+        #k_new = self.add_new_dish()
+        model.seat_at_dish(j, t, 1)
+
+
+
+    def sequence3(self, alpha, beta, gamma):
+        docs = [[0,1,2,3], [0,1,4,5], [0,1,5,6]]
+        V = 7
+        model = hdplda2.HDPLDA(alpha, beta, gamma, docs, V)
+
+        k1 = model.add_new_dish()
+        k2 = model.add_new_dish()
+
+        j = 0
+        t1 = model.add_new_table(j, k1)
+        t2 = model.add_new_table(j, k2)
+        model.seat_at_table(j, 0, t1)
+        model.seat_at_table(j, 1, t2)
+        model.seat_at_table(j, 2, t1)
+        model.seat_at_table(j, 3, t1)
+
+        j = 1
+        t1 = model.add_new_table(j, k1)
+        t2 = model.add_new_table(j, k2)
+        model.seat_at_table(j, 0, t1)
+        model.seat_at_table(j, 1, t2)
+        model.seat_at_table(j, 2, t2)
+        model.seat_at_table(j, 3, t2)
+
+        j = 2
+        t1 = model.add_new_table(j, k1)
+        t2 = model.add_new_table(j, k2)
+        model.seat_at_table(j, 0, t1)
+        model.seat_at_table(j, 1, t2)
+        model.seat_at_table(j, 2, t2)
+        model.seat_at_table(j, 3, t2)
+
+        model.dump()
+
+
+    def sequence2(self, alpha, beta, gamma):
+        docs = [[0,1,2,3], [0,1,4,5], [0,1,5,6]]
+        V = 7
+        model = hdplda2.HDPLDA(alpha, beta, gamma, docs, V)
+
+        # assign all words to table 1 and all tables to dish 1
+        k_new = model.add_new_dish()
+        self.assertEqual(k_new, 1)
+        for j in xrange(3):
+            t_new = model.add_new_table(j, k_new)
+            self.assertEqual(t_new, 1)
+            for i in xrange(4):
+                model.seat_at_table(j, i, t_new)
+
+        self.assertAlmostEqual(model.n_k[0], beta * V)
+        self.assertAlmostEqual(model.n_k[1], beta * V + 12)
+        self.assertAlmostEqual(model.n_kv[1][0], beta + 3)
+        self.assertAlmostEqual(model.n_kv[1][1], beta + 3)
+        self.assertAlmostEqual(model.n_kv[1][2], beta + 1)
+        self.assertAlmostEqual(model.n_kv[1][3], beta + 1)
+        self.assertAlmostEqual(model.n_kv[1][4], beta + 1)
+        self.assertAlmostEqual(model.n_kv[1][5], beta + 2)
+        self.assertAlmostEqual(model.n_kv[1][6], beta + 1)
+        self.assertEqual(model.m_k[0], 0)
+        self.assertEqual(model.m_k[1], 3)
+
+        #model.sampling_k(0, 1)
+        model.leave_from_dish(0, 1) # decrease m and m_k only
+        self.assertEqual(model.m, 2)
+        self.assertEqual(model.m_k[1], 2)
+
+        model.seat_at_dish(0, 1, 1)
+        self.assertEqual(model.m, 3)
+        self.assertEqual(model.m_k[1], 3)
+
+        for i in xrange(1):
+            for j in xrange(3):
+                model.sampling_k(j, 1)
+                #model.dump()
+
+
+    def sequence1(self, alpha, beta, gamma):
         docs = [[0,1,2,3], [0,1,4,5], [0,1,5,6]]
         V = 7
         model = hdplda2.HDPLDA(alpha, beta, gamma, docs, V)
@@ -25,9 +228,9 @@ class TestHDPLDA(unittest.TestCase):
         self.assertEqual(len(p_k), 1)
         self.assertAlmostEqual(p_k[0], 1)
 
-        k_new = model.add_new_topic()
+        k_new = model.add_new_dish()
         self.assertEqual(k_new, 1)
-        t_new = model.add_new_table(j, f_k, k_new)
+        t_new = model.add_new_table(j, k_new)
         self.assertEqual(t_new, 1)
         self.assertEqual(model.k_jt[j][t_new], 1)
 
@@ -51,8 +254,10 @@ class TestHDPLDA(unittest.TestCase):
         self.assertAlmostEqual(f_k[1], (beta+0)/(V*beta+1))
         p_t = model.calc_table_posterior(j, f_k)
         self.assertEqual(len(p_t), 2)
-        self.assertAlmostEqual(p_t[0], 0.10151692)
-        self.assertAlmostEqual(p_t[1], 0.89848308)
+        p0 = alpha / (1 + gamma) * (beta / (V * beta + 1) + gamma / V)
+        p1 = 1 * beta / (V * beta + 1)
+        self.assertAlmostEqual(p_t[0], p0 / (p0 + p1))  # 0.10151692
+        self.assertAlmostEqual(p_t[1], p1 / (p0 + p1))  # 0.89848308
 
         t_new = 1
         model.seat_at_table(j, i, t_new)
@@ -85,7 +290,7 @@ class TestHDPLDA(unittest.TestCase):
 
         k_new = 1 # TODO : calculate posterior of k
 
-        t_new = model.add_new_table(j, f_k, k_new)
+        t_new = model.add_new_table(j, k_new)
         self.assertEqual(t_new, 2)
         self.assertEqual(k_new, model.k_jt[j][t_new])
 
@@ -136,8 +341,9 @@ class TestHDPLDA(unittest.TestCase):
         self.assertEqual(len(p_t), 1)
         self.assertAlmostEqual(p_t[0], 1)
 
+        # add x_10 into a new table with dish 1
         k_new = 1
-        t_new = model.add_new_table(j, f_k, k_new)
+        t_new = model.add_new_table(j, k_new)
         self.assertEqual(t_new, 1)
 
         self.assertListEqual(model.using_t[j], [0, 1])
