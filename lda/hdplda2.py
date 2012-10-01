@@ -44,9 +44,11 @@ class HDPLDA:
         for j, x_i in enumerate(self.x_ji):
             for i in xrange(len(x_i)):
                 self.sampling_t(j, i)
+        self.dump()
         for j in xrange(self.M):
             for t in self.using_t[j]:
                 if t != 0: self.sampling_k(j, t)
+        self.dump()
 
     def worddist(self):
         return None
@@ -56,12 +58,18 @@ class HDPLDA:
 
     def dump(self, disp_x=False):
         if disp_x: print "x_ji:", self.x_ji
+        print "using_t:", self.using_t
         print "t_ji:", self.t_ji
+        print "using_k:", self.using_k
         print "k_jt:", self.k_jt
-        print "n_kv:", self.n_kv
+        print "----"
         print "n_jt:", self.n_jt
+        print "n_jtv:", self.n_jtv
         print "n_k:", self.n_k
+        print "n_kv:", self.n_kv
+        print "m:", self.m
         print "m_k:", self.m_k
+        print
 
 
     # sampling t (table) from posterior
@@ -80,7 +88,7 @@ class HDPLDA:
             k_new = numpy.random.multinomial(1, p_k).argmax()
             if k_new == 0:
                 k_new = self.add_new_topic()
-            t_new = self.add_new_table(j, f_k, k_new)
+            t_new = self.add_new_table(j, k_new)
 
         # increase counters
         self.seat_at_table(j, i, t_new)
@@ -112,12 +120,14 @@ class HDPLDA:
             self.using_k.remove(k)
 
     def calc_f_k(self, v):
-        return [self.n_kv[k].get(v, self.beta) for k in self.using_k] / self.n_k[self.using_k]
+        return [n_kv.get(v, self.beta) for n_kv in self.n_kv] / self.n_k
 
     def calc_table_posterior(self, j, f_k):
         using_t = self.using_t[j]
+        print f_k, self.k_jt[j][using_t]
+        print f_k[self.k_jt[j][using_t]]
         p_t = self.n_jt[j][using_t] * f_k[self.k_jt[j][using_t]]
-        p_x_ji = numpy.inner(self.m_k[self.using_k], f_k) + self.gamma / self.V
+        p_x_ji = numpy.inner(self.m_k, f_k) + self.gamma / self.V
         p_t[0] = p_x_ji * self.alpha / (self.gamma + self.m)
         return p_t / p_t.sum()
 
@@ -139,7 +149,7 @@ class HDPLDA:
             self.n_jtv[j][t_new][v] = 1
 
     # Assign guest x_ji to a new table and draw topic (dish) of the table
-    def add_new_table(self, j, f_k, k_new):
+    def add_new_table(self, j, k_new):
         for t_new, t in enumerate(self.using_t[j]):
             if t_new != t: break
         else:
@@ -160,18 +170,41 @@ class HDPLDA:
 
     def calc_dish_posterior_w(self, f_k):
         "calculate dish(topic) posterior when one word is removed"
-        p_k = self.m_k[self.using_k] * f_k
+        p_k = (self.m_k * f_k)[self.using_k]
         p_k[0] = self.gamma / self.V
         return p_k / p_k.sum()
 
 
 
-
     def sampling_k(self, j, t):
         """sampling k (dish=topic) from posterior"""
-
         self.leave_from_dish(j, t)
 
+        # sampling of k
+        p_k = self.calc_dish_posterior_t(j, t)
+        k_new = self.using_k[numpy.random.multinomial(1, p_k).argmax()]
+        if k_new == 0:
+            k_new = self.add_new_topic()
+
+        print j, t, k_new, p_k
+
+        self.seat_at_dish(j, t, k_new)
+
+    def leave_from_dish(self, j, t):
+        """
+        This makes the table leave from its dish and only the table counter decrease.
+        The word counters (n_k and n_kv) stay.
+        """
+        k = self.k_jt[j][t]
+        assert k > 0
+        self.m_k[k] -= 1
+        self.m -= 1
+        if self.m_k[k] == 0:
+            self.using_k.remove(k)
+            self.k_jt[j][t] = 0
+
+    def calc_dish_posterior_t(self, j, t):
+        "calculate dish(topic) posterior when one table is removed"
         k_old = self.k_jt[j][t]     # it may be zero (means a removed dish)
 
         Vbeta = self.V * self.beta
@@ -193,40 +226,25 @@ class HDPLDA:
         log_p_k[0] = log_p_k_new
         log_p_k = log_p_k[self.using_k]
         p_k = numpy.exp(log_p_k - log_p_k.max())
-        p_k /= p_k.sum()
+        return p_k / p_k.sum()
 
-        # sampling of k
-        k_new = self.using_k[numpy.random.multinomial(1, p_k).argmax()]
+    def seat_at_dish(self, j, t, k_new):
+        self.m += 1
+        self.m_k[k_new] += 1
 
-        # update counters
-        if k_new == 0:
-            k_new = self.add_new_topic()
-            self.m_k[k_new] += 1
-
+        k_old = self.k_jt[j][t]     # it may be zero (means a removed dish)
         if k_new != k_old:
-            self.m_k[k_new] += 1
             self.k_jt[j][t] = k_new
 
+            n_jt = self.n_jt[j][t]
             if k_old != 0: self.n_k[k_old] -= n_jt
             self.n_k[k_new] += n_jt
-            for v, n in n_jtv.iteritems():
+            for v, n in self.n_jtv[j][t].iteritems():
                 if k_old != 0: self.n_kv[k_old][v] -= n
                 if v in self.n_kv[k_new]:
                     self.n_kv[k_new][v] += n
                 else:
                     self.n_kv[k_new][v] = self.beta + n
-
-    def leave_from_dish(self, j, t):
-        """
-        This makes the table leave from its dish and only the table counter decrease.
-        The word counters (n_k and n_kv) stay.
-        """
-        k = self.k_jt[j][t]
-        assert k > 0
-        self.m_k[k] -= 1
-        if self.m_k[k] == 0:
-            self.using_k.remove(k)
-            self.k_jt[j][t] = 0
 
 
     def add_new_topic(self):
@@ -237,7 +255,9 @@ class HDPLDA:
             k_new = len(self.using_k)
             self.n_k = numpy.resize(self.n_k, k_new + 1)
             self.m_k = numpy.resize(self.m_k, k_new + 1)
-            self.n_kv.append(None)
+            if k_new >= len(self.n_kv): self.n_kv.append(None)
+            assert k_new == self.using_k[-1] + 1
+            assert k_new == len(self.n_kv) - 1
 
         self.using_k.insert(k_new, k_new)
         self.n_k[k_new] = self.beta * self.V
