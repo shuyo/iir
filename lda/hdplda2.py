@@ -207,25 +207,29 @@ class HDPLDA:
     def calc_dish_posterior_t(self, j, t):
         "calculate dish(topic) posterior when one table is removed"
         k_old = self.k_jt[j][t]     # it may be zero (means a removed dish)
-
+        #print "V=", self.V, "beta=", self.beta, "n_k=", self.n_k
         Vbeta = self.V * self.beta
-        n_k = self.n_k + Vbeta
+        n_k = self.n_k.copy()
         n_jt = self.n_jt[j][t]
         n_k[k_old] -= n_jt
-        log_p_k = numpy.log(self.m_k) + gammaln(n_k) + gammaln(n_k + n_jt)
+        log_p_k = numpy.log(self.m_k) + gammaln(n_k) - gammaln(n_k + n_jt)
         log_p_k_new = numpy.log(self.gamma) + gammaln(Vbeta) - gammaln(Vbeta + n_jt)
+        #print "log_p_k_new+=gammaln(",Vbeta,") - gammaln(",Vbeta + n_jt,")"
 
-        n_jtv = self.n_jtv[j][t]
         gammaln_beta = gammaln(self.beta)
-        for w, n_jtw in n_jtv.iteritems():
+        for w, n_jtw in self.n_jtv[j][t].iteritems():
             assert n_jtw >= 0
             if n_jtw == 0: continue
-            n_kw = numpy.array([n.get(w, 0) for n in self.n_kv]) + self.beta
+            n_kw = numpy.array([n.get(w, self.beta) for n in self.n_kv])
             n_kw[k_old] -= n_jtw
+            n_kw[0]=1 #dummy
+            if numpy.any(n_kw <= 0): print n_kw # for debug
             log_p_k += gammaln(n_kw + n_jtw) - gammaln(n_kw)
             log_p_k_new += gammaln(self.beta + n_jtw) - gammaln_beta
+            #print "log_p_k_new+=gammaln(",self.beta + n_jtw,") - gammaln(",self.beta,"), w=",w
         log_p_k[0] = log_p_k_new
         log_p_k = log_p_k[self.using_k]
+        #print log_p_k, numpy.exp(log_p_k)
         p_k = numpy.exp(log_p_k - log_p_k.max())
         return p_k / p_k.sum()
 
