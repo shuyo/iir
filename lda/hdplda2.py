@@ -44,11 +44,11 @@ class HDPLDA:
         for j, x_i in enumerate(self.x_ji):
             for i in xrange(len(x_i)):
                 self.sampling_t(j, i)
-        self.dump()
+        #self.dump()
         for j in xrange(self.M):
             for t in self.using_t[j]:
                 if t != 0: self.sampling_k(j, t)
-        self.dump()
+        #self.dump()
 
     def worddist(self):
         return None
@@ -82,12 +82,13 @@ class HDPLDA:
 
         # sampling from posterior p(t_ji=t)
         p_t = self.calc_table_posterior(j, f_k)
+        if len(p_t) > 1 and p_t[1] < 0: self.dump()
         t_new = self.using_t[j][numpy.random.multinomial(1, p_t).argmax()]
         if t_new == 0:
             p_k = self.calc_dish_posterior_w(f_k)
-            k_new = numpy.random.multinomial(1, p_k).argmax()
+            k_new = self.using_k[numpy.random.multinomial(1, p_k).argmax()]
             if k_new == 0:
-                k_new = self.add_new_topic()
+                k_new = self.add_new_dish()
             t_new = self.add_new_table(j, k_new)
 
         # increase counters
@@ -115,6 +116,7 @@ class HDPLDA:
         self.using_t[j].remove(t)
         self.m_k[k] -= 1
         self.m -= 1
+        assert self.m_k[k] >= 0
         if self.m_k[k] == 0:
             # remove topic (dish) where all tables are gone
             self.using_k.remove(k)
@@ -124,14 +126,13 @@ class HDPLDA:
 
     def calc_table_posterior(self, j, f_k):
         using_t = self.using_t[j]
-        print f_k, self.k_jt[j][using_t]
-        print f_k[self.k_jt[j][using_t]]
         p_t = self.n_jt[j][using_t] * f_k[self.k_jt[j][using_t]]
         p_x_ji = numpy.inner(self.m_k, f_k) + self.gamma / self.V
         p_t[0] = p_x_ji * self.alpha / (self.gamma + self.m)
         return p_t / p_t.sum()
 
     def seat_at_table(self, j, i, t_new):
+        assert t_new in self.using_t[j]
         self.t_ji[j][i] = t_new
         self.n_jt[j][t_new] += 1
 
@@ -150,6 +151,7 @@ class HDPLDA:
 
     # Assign guest x_ji to a new table and draw topic (dish) of the table
     def add_new_table(self, j, k_new):
+        assert k_new in self.using_k
         for t_new, t in enumerate(self.using_t[j]):
             if t_new != t: break
         else:
@@ -184,9 +186,7 @@ class HDPLDA:
         p_k = self.calc_dish_posterior_t(j, t)
         k_new = self.using_k[numpy.random.multinomial(1, p_k).argmax()]
         if k_new == 0:
-            k_new = self.add_new_topic()
-
-        print j, t, k_new, p_k
+            k_new = self.add_new_dish()
 
         self.seat_at_dish(j, t, k_new)
 
@@ -197,6 +197,7 @@ class HDPLDA:
         """
         k = self.k_jt[j][t]
         assert k > 0
+        assert self.m_k[k] > 0
         self.m_k[k] -= 1
         self.m -= 1
         if self.m_k[k] == 0:
@@ -247,17 +248,18 @@ class HDPLDA:
                     self.n_kv[k_new][v] = self.beta + n
 
 
-    def add_new_topic(self):
+    def add_new_dish(self):
         "This is commonly used by sampling_t and sampling_k."
         for k_new, k in enumerate(self.using_k):
             if k_new != k: break
         else:
             k_new = len(self.using_k)
-            self.n_k = numpy.resize(self.n_k, k_new + 1)
-            self.m_k = numpy.resize(self.m_k, k_new + 1)
-            if k_new >= len(self.n_kv): self.n_kv.append(None)
+            if k_new >= len(self.n_kv): 
+                self.n_k = numpy.resize(self.n_k, k_new + 1)
+                self.m_k = numpy.resize(self.m_k, k_new + 1)
+                self.n_kv.append(None)
             assert k_new == self.using_k[-1] + 1
-            assert k_new == len(self.n_kv) - 1
+            assert k_new < len(self.n_kv)
 
         self.using_k.insert(k_new, k_new)
         self.n_k[k_new] = self.beta * self.V
