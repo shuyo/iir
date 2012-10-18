@@ -9,6 +9,13 @@
 import numpy
 from scipy.special import gammaln
 
+class DefaultDict(dict):
+    def __init__(self, v):
+        self.v = v
+        dict.__init__(self)
+    def __getitem__(self, k):
+        return dict.__getitem__(self, k) if k in self else self.v
+
 class HDPLDA:
     def __init__(self, alpha, beta, gamma, docs, V):
         self.alpha = alpha
@@ -33,9 +40,7 @@ class HDPLDA:
         self.m = 0
         self.m_k = numpy.ones(1 ,dtype=int)  # number of tables for each topic
         self.n_k = numpy.array([self.beta * self.V]) # number of terms for each topic ( + beta * V )
-        class AlwaysZero:
-            def get(self, x, y): return 0
-        self.n_kv = [AlwaysZero()]            # number of terms for each topic and vocabulary ( + beta )
+        self.n_kv = [DefaultDict(0)]            # number of terms for each topic and vocabulary ( + beta )
 
         # table for each document and term (-1 means not-assigned)
         self.t_ji = [numpy.zeros(len(x_i), dtype=int) - 1 for x_i in docs] 
@@ -225,7 +230,7 @@ class HDPLDA:
             n_kw = numpy.array([n.get(w, self.beta) for n in self.n_kv])
             n_kw[k_old] -= n_jtw
             n_kw = n_kw[self.using_k]
-            n_kw[0]=1 #dummy
+            n_kw[0] = 1 # dummy for logarithm's warning
             if numpy.any(n_kw <= 0): print n_kw # for debug
             log_p_k += gammaln(n_kw + n_jtw) - gammaln(n_kw)
             log_p_k_new += gammaln(self.beta + n_jtw) - gammaln_beta
