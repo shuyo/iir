@@ -127,7 +127,7 @@ class HDPLDA:
             self.using_k.remove(k)
 
     def calc_f_k(self, v):
-        return [n_kv.get(v, self.beta) for n_kv in self.n_kv] / self.n_k
+        return [n_kv[v] for n_kv in self.n_kv] / self.n_k
 
     def calc_table_posterior(self, j, f_k):
         using_t = self.using_t[j]
@@ -146,14 +146,8 @@ class HDPLDA:
         self.n_k[k_new] += 1
 
         v = self.x_ji[j][i]
-        if v in self.n_kv[k_new]:
-            self.n_kv[k_new][v] += 1
-        else:
-            self.n_kv[k_new][v] = self.beta + 1
-        if v in self.n_jtv[j][t_new]:
-            self.n_jtv[j][t_new][v] += 1
-        else:
-            self.n_jtv[j][t_new][v] = 1
+        self.n_kv[k_new][v] += 1
+        self.n_jtv[j][t_new][v] += 1
 
     # Assign guest x_ji to a new table and draw topic (dish) of the table
     def add_new_table(self, j, k_new):
@@ -168,7 +162,7 @@ class HDPLDA:
 
         self.using_t[j].insert(t_new, t_new)
         self.n_jt[j][t_new] = 0  # to make sure
-        self.n_jtv[j][t_new] = dict()
+        self.n_jtv[j][t_new] = DefaultDict(0)
 
         self.k_jt[j][t_new] = k_new
         self.m_k[k_new] += 1
@@ -253,10 +247,7 @@ class HDPLDA:
             self.n_k[k_new] += n_jt
             for v, n in self.n_jtv[j][t].iteritems():
                 if k_old != 0: self.n_kv[k_old][v] -= n
-                if v in self.n_kv[k_new]:
-                    self.n_kv[k_new][v] += n
-                else:
-                    self.n_kv[k_new][v] = self.beta + n
+                self.n_kv[k_new][v] += n
 
 
     def add_new_dish(self):
@@ -275,7 +266,7 @@ class HDPLDA:
         self.using_k.insert(k_new, k_new)
         self.n_k[k_new] = self.beta * self.V
         self.m_k[k_new] = 0
-        self.n_kv[k_new] = dict()
+        self.n_kv[k_new] = DefaultDict(self.beta)
         return k_new
 
 
