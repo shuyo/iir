@@ -31,7 +31,7 @@ class HDPLDA:
         self.n_jtv = [[None] for j in xrange(self.M)]
 
         self.m = 0
-        self.m_k = numpy.zeros(1 ,dtype=int)  # number of tables for each topic
+        self.m_k = numpy.ones(1 ,dtype=int)  # number of tables for each topic
         self.n_k = numpy.array([self.beta * self.V]) # number of terms for each topic ( + beta * V )
         class AlwaysZero:
             def get(self, x, y): return 0
@@ -129,6 +129,7 @@ class HDPLDA:
         p_t = self.n_jt[j][using_t] * f_k[self.k_jt[j][using_t]]
         p_x_ji = numpy.inner(self.m_k, f_k) + self.gamma / self.V
         p_t[0] = p_x_ji * self.alpha / (self.gamma + self.m)
+        #print "un-normalized p_t = ", p_t
         return p_t / p_t.sum()
 
     def seat_at_table(self, j, i, t_new):
@@ -212,7 +213,8 @@ class HDPLDA:
         n_k = self.n_k.copy()
         n_jt = self.n_jt[j][t]
         n_k[k_old] -= n_jt
-        log_p_k = numpy.log(self.m_k) + gammaln(n_k) - gammaln(n_k + n_jt)
+        n_k = n_k[self.using_k]
+        log_p_k = numpy.log(self.m_k[self.using_k]) + gammaln(n_k) - gammaln(n_k + n_jt)
         log_p_k_new = numpy.log(self.gamma) + gammaln(Vbeta) - gammaln(Vbeta + n_jt)
         #print "log_p_k_new+=gammaln(",Vbeta,") - gammaln(",Vbeta + n_jt,")"
 
@@ -222,14 +224,14 @@ class HDPLDA:
             if n_jtw == 0: continue
             n_kw = numpy.array([n.get(w, self.beta) for n in self.n_kv])
             n_kw[k_old] -= n_jtw
+            n_kw = n_kw[self.using_k]
             n_kw[0]=1 #dummy
             if numpy.any(n_kw <= 0): print n_kw # for debug
             log_p_k += gammaln(n_kw + n_jtw) - gammaln(n_kw)
             log_p_k_new += gammaln(self.beta + n_jtw) - gammaln_beta
             #print "log_p_k_new+=gammaln(",self.beta + n_jtw,") - gammaln(",self.beta,"), w=",w
         log_p_k[0] = log_p_k_new
-        log_p_k = log_p_k[self.using_k]
-        #print log_p_k, numpy.exp(log_p_k)
+        #print "un-normalized p_k = ", numpy.exp(log_p_k)
         p_k = numpy.exp(log_p_k - log_p_k.max())
         return p_k / p_k.sum()
 
