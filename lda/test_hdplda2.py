@@ -36,12 +36,15 @@ class TestHDPLDA(unittest.TestCase):
 
 
     def sequence_random(self, alpha, beta, gamma, seed):
+        print (alpha, beta, gamma)
         numpy.random.seed(seed)
         docs = [[0,1,2,3], [0,1,4,5], [0,1,5,6]]
         V = 7
         model = hdplda2.HDPLDA(alpha, beta, gamma, docs, V)
+        print model.perplexity()
         for i in xrange(10):
             model.inference()
+            print model.perplexity()
 
     def sequence4(self, alpha, beta, gamma):
         docs = [[0,1,2,3], [0,1,4,5], [0,1,5,6]]
@@ -180,6 +183,8 @@ class TestHDPLDA(unittest.TestCase):
         model.seat_at_table(j, 3, t2)
 
         #model.dump()
+
+        # test for topic-word distribution
         phi = model.worddist()
         self.assertEqual(len(phi), 2)
         self.assertAlmostEqual(phi[0][0], (beta+3)/(V*beta+5))
@@ -193,6 +198,20 @@ class TestHDPLDA(unittest.TestCase):
         self.assertAlmostEqual(phi[1][6], (beta+1)/(V*beta+7))
         for v in [0,2,3]:
             self.assertAlmostEqual(phi[1][v], (beta+0)/(V*beta+7))
+
+
+        # test for document-topic distribution
+        theta = model.docdist()
+        self.assertEqual(theta.shape, (3, 3))
+        self.assertAlmostEqual(theta[0][0], (  alpha*gamma/(6+gamma))/(4+alpha))
+        self.assertAlmostEqual(theta[0][1], (3+alpha*  3  /(6+gamma))/(4+alpha))
+        self.assertAlmostEqual(theta[0][2], (1+alpha*  3  /(6+gamma))/(4+alpha))
+        self.assertAlmostEqual(theta[1][0], (  alpha*gamma/(6+gamma))/(4+alpha))
+        self.assertAlmostEqual(theta[1][1], (1+alpha*  3  /(6+gamma))/(4+alpha))
+        self.assertAlmostEqual(theta[1][2], (3+alpha*  3  /(6+gamma))/(4+alpha))
+        self.assertAlmostEqual(theta[2][0], (  alpha*gamma/(6+gamma))/(4+alpha))
+        self.assertAlmostEqual(theta[2][1], (1+alpha*  3  /(6+gamma))/(4+alpha))
+        self.assertAlmostEqual(theta[2][2], (3+alpha*  3  /(6+gamma))/(4+alpha))
 
         j = 0
         i = 0

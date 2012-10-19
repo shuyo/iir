@@ -59,12 +59,43 @@ class HDPLDA:
         #self.dump()
 
     def worddist(self):
+        """return topic-word distribution without new topic"""
         return [DefaultDict(self.beta / self.n_k[k]).update(
             (v, n_kv / self.n_k[k]) for v, n_kv in self.n_kv[k].iteritems())
                 for k in self.using_k if k != 0]
 
+    def docdist(self):
+        """return document-topic distribution with new topic"""
+        # effect from table-dish assignment
+        am_k = numpy.array(self.m_k, dtype=float)
+        am_k[0] = self.gamma
+        am_k *= self.alpha / am_k[self.using_k].sum()
+
+        theta = []
+        for j, n_jt in enumerate(self.n_jt):
+            p_jk = am_k.copy()
+            for t in self.using_t[j]:
+                if t == 0: continue
+                k = self.k_jt[j][t]
+                p_jk[k] += n_jt[t]
+            p_jk = p_jk[self.using_k]
+            theta.append(p_jk / p_jk.sum())
+
+        return numpy.array(theta)
+
     def perplexity(self):
-        return None
+        phi = [DefaultDict(1.0/self.V)] + self.worddist()
+        theta = self.docdist()
+        log_likelihood = 0
+        N = 0
+        for x_ji, p_jk in zip(self.x_ji, theta):
+            for v in x_ji:
+                word_prob = sum(t * p[v] for t, p in zip(p_jk, phi))
+                log_likelihood -= numpy.log(word_prob)
+            N += len(x_ji)
+        return numpy.exp(log_likelihood / N)
+
+
 
     def dump(self, disp_x=False):
         if disp_x: print "x_ji:", self.x_ji
