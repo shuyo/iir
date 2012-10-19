@@ -15,6 +15,9 @@ class DefaultDict(dict):
         dict.__init__(self)
     def __getitem__(self, k):
         return dict.__getitem__(self, k) if k in self else self.v
+    def update(self, d):
+        dict.update(self, d)
+        return self
 
 class HDPLDA:
     def __init__(self, alpha, beta, gamma, docs, V):
@@ -56,7 +59,9 @@ class HDPLDA:
         #self.dump()
 
     def worddist(self):
-        return None
+        return [DefaultDict(self.beta / self.n_k[k]).update(
+            (v, n_kv / self.n_k[k]) for v, n_kv in self.n_kv[k].iteritems())
+                for k in self.using_k if k != 0]
 
     def perplexity(self):
         return None

@@ -44,10 +44,10 @@ class TestHDPLDA(unittest.TestCase):
             model.inference()
 
     def sequence4(self, alpha, beta, gamma):
-        print "sequence4"
         docs = [[0,1,2,3], [0,1,4,5], [0,1,5,6]]
         V = 7
         model = hdplda2.HDPLDA(alpha, beta, gamma, docs, V)
+        Vbeta = V * beta
 
         k1 = model.add_new_dish()
         k2 = model.add_new_dish()
@@ -114,11 +114,30 @@ class TestHDPLDA(unittest.TestCase):
         #print "n_jt=", model.n_jt[j][t]
 
         p_k = model.calc_dish_posterior_t(j, t)
-        print "p_k=", p_k
+        #print "p_k=", p_k
         p0 = gamma / V
         p1 = 1 * beta / (V * beta + 1)
-        p2 = 4 * (beta + 2) / (V * beta + 10)
-        print "[p0, p1, p2]=", [p0, p1, p2]
+        p2 = 4 * (beta + 2) / (Vbeta + 10)
+        #print "[p0, p1, p2]=", [p0, p1, p2]
+        self.assertAlmostEqual(p_k[0], p0 / (p0 + p1 + p2))
+        self.assertAlmostEqual(p_k[1], p1 / (p0 + p1 + p2))
+        self.assertAlmostEqual(p_k[2], p2 / (p0 + p1 + p2))
+
+        #k_new = self.add_new_dish()
+        model.seat_at_dish(j, t, 1)
+
+        t = 2
+        model.leave_from_dish(j, t)
+
+        #print "n_jt=", model.n_jt[j][t]
+
+        p_k = model.calc_dish_posterior_t(j, t)
+        #print "p_k=", p_k
+
+        p0 = gamma * beta * beta * beta / (Vbeta * (Vbeta + 1) * (Vbeta + 2))
+        p1 = 2 * (beta + 0) * beta * beta / ((Vbeta + 2) * (Vbeta + 3) * (Vbeta + 4))
+        p2 = 3 * (beta + 2) * beta * beta / ((Vbeta + 7) * (Vbeta + 8) * (Vbeta + 9))
+        #print "[p0, p1, p2]=", [p0, p1, p2]
         self.assertAlmostEqual(p_k[0], p0 / (p0 + p1 + p2))
         self.assertAlmostEqual(p_k[1], p1 / (p0 + p1 + p2))
         self.assertAlmostEqual(p_k[2], p2 / (p0 + p1 + p2))
@@ -160,7 +179,67 @@ class TestHDPLDA(unittest.TestCase):
         model.seat_at_table(j, 2, t2)
         model.seat_at_table(j, 3, t2)
 
-        model.dump()
+        #model.dump()
+        phi = model.worddist()
+        self.assertEqual(len(phi), 2)
+        self.assertAlmostEqual(phi[0][0], (beta+3)/(V*beta+5))
+        self.assertAlmostEqual(phi[0][2], (beta+1)/(V*beta+5))
+        self.assertAlmostEqual(phi[0][3], (beta+1)/(V*beta+5))
+        for v in [1,4,5,6]:
+            self.assertAlmostEqual(phi[0][v], (beta+0)/(V*beta+5))
+        self.assertAlmostEqual(phi[1][1], (beta+3)/(V*beta+7))
+        self.assertAlmostEqual(phi[1][4], (beta+1)/(V*beta+7))
+        self.assertAlmostEqual(phi[1][5], (beta+2)/(V*beta+7))
+        self.assertAlmostEqual(phi[1][6], (beta+1)/(V*beta+7))
+        for v in [0,2,3]:
+            self.assertAlmostEqual(phi[1][v], (beta+0)/(V*beta+7))
+
+        j = 0
+        i = 0
+        v = docs[j][i]
+
+        model.leave_from_table(j, i)
+
+        f_k = model.calc_f_k(v)
+        self.assertEqual(len(f_k), 3)
+        self.assertAlmostEqual(f_k[1], (beta+2)/(V*beta+4))
+        self.assertAlmostEqual(f_k[2], (beta+0)/(V*beta+7))
+
+        p_t = model.calc_table_posterior(j, f_k)
+        self.assertEqual(len(p_t), 3)
+        p1 = 2 * f_k[1]
+        p2 = 1 * f_k[2]
+        p0 = alpha / (6+gamma) * (3*f_k[1] + 3*f_k[2] + gamma/V)
+        self.assertAlmostEqual(p_t[0], p0 / (p0+p1+p2))
+        self.assertAlmostEqual(p_t[1], p1 / (p0+p1+p2))
+        self.assertAlmostEqual(p_t[2], p2 / (p0+p1+p2))
+
+        model.seat_at_table(j, i, 1)
+
+        j = 0
+        i = 1
+        v = docs[j][i]
+
+        model.leave_from_table(j, i)
+        self.assertEqual(len(model.using_t[j]), 2)
+        self.assertEqual(model.using_t[j][0], 0)
+        self.assertEqual(model.using_t[j][1], 1)
+
+        f_k = model.calc_f_k(v)
+        self.assertEqual(len(f_k), 3)
+        self.assertAlmostEqual(f_k[1], (beta+0)/(V*beta+5))
+        self.assertAlmostEqual(f_k[2], (beta+2)/(V*beta+6))
+
+        p_t = model.calc_table_posterior(j, f_k)
+        self.assertEqual(len(p_t), 2)
+        p1 = 3 * f_k[1]
+        p0 = alpha / (5+gamma) * (3*f_k[1] + 2*f_k[2] + gamma/V)
+        self.assertAlmostEqual(p_t[0], p0 / (p0+p1))
+        self.assertAlmostEqual(p_t[1], p1 / (p0+p1))
+
+        model.seat_at_table(j, i, 1)
+
+
 
 
     def sequence2(self, alpha, beta, gamma):
@@ -186,7 +265,7 @@ class TestHDPLDA(unittest.TestCase):
         self.assertAlmostEqual(model.n_kv[1][4], beta + 1)
         self.assertAlmostEqual(model.n_kv[1][5], beta + 2)
         self.assertAlmostEqual(model.n_kv[1][6], beta + 1)
-        self.assertEqual(model.m_k[0], 0)
+        self.assertEqual(model.m_k[0], 1) # dummy
         self.assertEqual(model.m_k[1], 3)
 
         #model.sampling_k(0, 1)
@@ -215,7 +294,7 @@ class TestHDPLDA(unittest.TestCase):
         self.assertEqual(v, 0)
 
         f_k = model.calc_f_k(v)
-        self.assertSequenceEqual(f_k, [0.])
+        #self.assertSequenceEqual(f_k, [0.])
         p_t = model.calc_table_posterior(j, f_k)
         self.assertSequenceEqual(p_t, [1.])
 
@@ -245,7 +324,7 @@ class TestHDPLDA(unittest.TestCase):
 
         f_k = model.calc_f_k(v)
         self.assertEqual(len(f_k), 2)
-        self.assertAlmostEqual(f_k[0], 0)
+        #self.assertAlmostEqual(f_k[0], 0)
         self.assertAlmostEqual(f_k[1], (beta+0)/(V*beta+1))
         p_t = model.calc_table_posterior(j, f_k)
         self.assertEqual(len(p_t), 2)
