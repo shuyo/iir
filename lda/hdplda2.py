@@ -52,11 +52,9 @@ class HDPLDA:
         for j, x_i in enumerate(self.x_ji):
             for i in xrange(len(x_i)):
                 self.sampling_t(j, i)
-        #self.dump()
         for j in xrange(self.M):
             for t in self.using_t[j]:
                 if t != 0: self.sampling_k(j, t)
-        #self.dump()
 
     def worddist(self):
         """return topic-word distribution without new topic"""
@@ -66,7 +64,8 @@ class HDPLDA:
 
     def docdist(self):
         """return document-topic distribution with new topic"""
-        # effect from table-dish assignment
+
+        # am_k = effect from table-dish assignment
         am_k = numpy.array(self.m_k, dtype=float)
         am_k[0] = self.gamma
         am_k *= self.alpha / am_k[self.using_k].sum()
@@ -90,7 +89,7 @@ class HDPLDA:
         N = 0
         for x_ji, p_jk in zip(self.x_ji, theta):
             for v in x_ji:
-                word_prob = sum(t * p[v] for t, p in zip(p_jk, phi))
+                word_prob = sum(p * p_kv[v] for p, p_kv in zip(p_jk, phi))
                 log_likelihood -= numpy.log(word_prob)
             N += len(x_ji)
         return numpy.exp(log_likelihood / N)
@@ -113,8 +112,8 @@ class HDPLDA:
         print
 
 
-    # sampling t (table) from posterior
     def sampling_t(self, j, i):
+        """sampling t (table) from posterior"""
         self.leave_from_table(j, i)
 
         v = self.x_ji[j][i]
@@ -310,8 +309,38 @@ class HDPLDA:
 def hdplda_learning(hdplda, iteration):
     for i in range(iteration):
         hdplda.inference()
-        print "-%d K=%d p=%f" % (i + 1, len(hdplda.topics), hdplda.perplexity())
+        print "-%d K=%d p=%f" % (i + 1, len(hdplda.using_k)-1, hdplda.perplexity())
     return hdplda
+
+def output_summary(hdplda, voca, fp=None):
+    if fp==None:
+        import sys
+        fp = sys.stdout
+    K = len(hdplda.using_k) - 1
+    kmap = dict((k,i-1) for i, k in enumerate(hdplda.using_k))
+    dishcount = numpy.zeros(K, dtype=int)
+    wordcount = [DefaultDict(0) for k in xrange(K)]
+    for j, x_ji in enumerate(hdplda.x_ji):
+        for v, t in zip(x_ji, hdplda.t_ji[j]):
+            k = kmap[hdplda.k_jt[j][t]]
+            dishcount[k] += 1
+            wordcount[k][v] += 1
+
+    phi = hdplda.worddist()
+    for k, phi_k in enumerate(phi):
+        fp.write("\n-- topic: %d (%d words)\n" % (hdplda.using_k[k+1], dishcount[k]))
+        for w in sorted(phi_k, key=lambda w:-phi_k[w])[:20]:
+            fp.write("%s: %f (%d)\n" % (voca[w], phi_k[w], wordcount[k][w]))
+
+    fp.write("--- document-topic distribution\n")
+    theta = hdplda.docdist()
+    for j, theta_j in enumerate(theta):
+        fp.write("%d\t%s\n" % (j, "\t".join("%.3f" % p for p in theta_j[1:])))
+
+    fp.write("--- dishes for document\n")
+    for j, using_t in enumerate(hdplda.using_t):
+        fp.write("%d\t%s\n" % (j, "\t".join(str(hdplda.k_jt[j][t]) for t in using_t if t>0)))
+
 
 def main():
     import optparse
@@ -321,7 +350,6 @@ def main():
     parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha", default=numpy.random.gamma(1, 1))
     parser.add_option("--gamma", dest="gamma", type="float", help="parameter gamma", default=numpy.random.gamma(1, 1))
     parser.add_option("--beta", dest="beta", type="float", help="parameter of beta measure H", default=0.5)
-    parser.add_option("-k", dest="K", type="int", help="initial number of topics", default=1)
     parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=10)
     parser.add_option("-s", dest="stopwords", type="int", help="0=exclude stop words, 1=include stop words", default=1)
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
@@ -343,18 +371,15 @@ def main():
     if options.df > 0: docs = voca.cut_low_freq(docs, options.df)
 
     hdplda = HDPLDA(options.alpha, options.gamma, options.beta, docs, voca.size())
-    print "corpus=%d words=%d alpha=%f gamma=%f beta=%f initK=%d stopwords=%d" % (len(corpus), len(voca.vocas), options.alpha, options.gamma, options.beta, options.K, options.stopwords)
+    print "corpus=%d words=%d alpha=%.3f gamma=%.3f beta=%.3f stopwords=%d" % (len(corpus), len(voca.vocas), options.alpha, options.gamma, options.beta, options.stopwords)
     #hdplda.dump()
 
     #import cProfile
     #cProfile.runctx('hdplda_learning(hdplda, options.iteration)', globals(), locals(), 'hdplda.profile')
     hdplda_learning(hdplda, options.iteration)
+    output_summary(hdplda, voca)
 
-    phi = hdplda.worddist()
-    for k, phi_k in enumerate(phi):
-        print "\n-- topic: %d" % k
-        for w in numpy.argsort(-phi_k)[:20]:
-            print "%s: %f" % (voca[w], phi_k[w])
+
 
 if __name__ == "__main__":
     main()
