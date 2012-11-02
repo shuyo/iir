@@ -275,7 +275,7 @@ def main():
     parser.add_option("-c", dest="corpus", help="using range of Brown corpus' files(start:end)")
     parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha", default=numpy.random.gamma(1, 1))
     parser.add_option("--gamma", dest="gamma", type="float", help="parameter gamma", default=numpy.random.gamma(1, 1))
-    parser.add_option("--base", dest="base", type="float", help="parameter of base measure H", default=0.5)
+    parser.add_option("--beta", dest="base", type="float", help="parameter of beta measure H", default=0.5)
     parser.add_option("-k", dest="K", type="int", help="initial number of topics", default=1)
     parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=10)
     parser.add_option("-s", dest="stopwords", type="int", help="0=exclude stop words, 1=include stop words", default=1)
@@ -298,18 +298,20 @@ def main():
     if options.df > 0: docs = voca.cut_low_freq(docs, options.df)
 
     hdplda = HDPLDA(options.alpha, options.gamma, options.base, docs, voca.size())
-    print "corpus=%d words=%d alpha=%f gamma=%f base=%f initK=%d stopwords=%d" % (len(corpus), len(voca.vocas), options.alpha, options.gamma, options.base, options.K, options.stopwords)
+    print "corpus=%d words=%d alpha=%.3f gamma=%.3f base=%.3f stopwords=%d" % (len(corpus), len(voca.vocas), options.alpha, options.gamma, options.base, options.stopwords)
     #hdplda.dump()
 
     #import cProfile
     #cProfile.runctx('hdplda_learning(hdplda, options.iteration)', globals(), locals(), 'hdplda.profile')
     hdplda_learning(hdplda, options.iteration)
 
+    """
     phi = hdplda.worddist()
     for k, phi_k in enumerate(phi):
         print "\n-- topic: %d" % k
         for w in numpy.argsort(-phi_k)[:20]:
             print "%s: %f" % (voca[w], phi_k[w])
+    """
 
 if __name__ == "__main__":
     main()
