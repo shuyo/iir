@@ -9,46 +9,25 @@
 import numpy
 
 class HDPLDA:
-    def __init__(self, K, alpha, gamma, base, docs, V):
+    def __init__(self, alpha, gamma, base, docs, V):
         self.alpha = alpha
         self.base = base
         self.gamma = gamma
         self.V = V
 
         self.x_ji = docs # vocabulary for each document and term
-        self.t_ji = [] # table for each document and term
-        self.k_jt = [] # topic for each document and table
-        self.n_jt = [] # number of terms for each document and table
+        self.t_ji = [numpy.zeros(len(x_i), dtype=int) - 1 for x_i in docs] # table for each document and term (without assignment)
+        self.k_jt = [[] for x_i in docs] # topic for each document and table
+        self.n_jt = [numpy.ndarray(0,dtype=int) for x_i in docs] # number of terms for each document and table
 
-        self.tables = [] # available id of tables for each document
+        self.tables = [[] for x_i in docs] # available id of tables for each document
         self.n_tables = 0
 
-        self.m_k = numpy.zeros(K, dtype=int)  # number of tables for each topic
-        self.n_k = numpy.zeros(K, dtype=int)  # number of terms for each topic
-        self.n_kv = numpy.zeros((K, V), dtype=int) # number of terms for each topic and vocabulary
+        self.m_k = numpy.ndarray(0,dtype=int)  # number of tables for each topic
+        self.n_k = numpy.ndarray(0,dtype=int)  # number of terms for each topic
+        self.n_kv = numpy.ndarray((0, V),dtype=int) # number of terms for each topic and vocabulary
 
-        for x_i in docs:
-            self.k_jt.append(range(K))
-            t_i = numpy.random.randint(0, K, len(x_i))
-            self.t_ji.append(t_i)
-
-            n_t = numpy.zeros(K, dtype=int)
-            self.n_jt.append(n_t)
-            for t, v in zip(t_i, x_i):
-                self.n_kv[t, v] += 1
-                n_t[t] += 1
-
-            tables = []
-            for t, n in enumerate(n_t):
-                self.n_k[t] += n
-                if n > 0:
-                    self.m_k[t] += 1
-                    tables.append(t)
-
-            self.tables.append(tables)
-            self.n_tables += len(tables)
-
-        self.topics = [k for k, m in enumerate(self.m_k) if m > 0] # available id of topics
+        self.topics = [] # available id of topics
 
         # memoization
         self.updated_n_tables()
@@ -161,23 +140,24 @@ class HDPLDA:
         v = self.x_ji[j][i]
         tables = self.tables[j]
         t_old = self.t_ji[j][i]
-        k_old = self.k_jt[j][t_old]
+        if t_old >=0:
+            k_old = self.k_jt[j][t_old]
 
-        # decrease counters
-        self.n_kv[k_old, v] -= 1
-        self.n_k[k_old] -= 1
-        self.n_jt[j][t_old] -= 1
+            # decrease counters
+            self.n_kv[k_old, v] -= 1
+            self.n_k[k_old] -= 1
+            self.n_jt[j][t_old] -= 1
 
-        if self.n_jt[j][t_old]==0:
-            # 客がいなくなったテーブル
-            tables.remove(t_old)
-            self.m_k[k_old] -= 1
-            self.n_tables -= 1
-            self.updated_n_tables()
+            if self.n_jt[j][t_old]==0:
+                # table that all guests are gone
+                tables.remove(t_old)
+                self.m_k[k_old] -= 1
+                self.n_tables -= 1
+                self.updated_n_tables()
 
-            if self.m_k[k_old] == 0:
-                # 客がいなくなった料理(トピック)
-                self.topics.remove(k_old)
+                if self.m_k[k_old] == 0:
+                    # topic (dish) that all guests are gone
+                    self.topics.remove(k_old)
 
         # sampling from posterior p(t_ji=t)
         t_new = self.sampling_t(j, i, v, tables)
@@ -204,15 +184,14 @@ class HDPLDA:
         else:
             return self.new_table(j, i, f_k)
 
-    # 客 x_ji を新しいテーブルに案内
-    # テーブルのトピック(料理)もサンプリング
+    # Assign guest x_ji to a new table and draw topic (dish) of the table
     def new_table(self, j, i, f_k):
-        # 空きテーブルIDを取得
+        # search a spare table ID
         T_j = self.n_jt[j].size
         for t_new in range(T_j):
             if t_new not in self.tables[j]: break
         else:
-            # new table ID
+            # new table ID (no spare)
             t_new = T_j
             self.n_jt[j].resize(t_new+1)
             self.n_jt[j][t_new] = 0
@@ -221,7 +200,7 @@ class HDPLDA:
         self.n_tables += 1
         self.updated_n_tables()
 
-        # sampling of k (新しいテーブルの料理(トピック))
+        # sampling of k for new topic(= dish of new table)
         p_k = [self.m_k[k] * f_k[k] for k in self.topics]
         p_k.append(self.gamma_f_k_new_x_ji)
         k_new = self.sampling_topic(numpy.array(p_k, copy=False))
@@ -232,7 +211,7 @@ class HDPLDA:
         return t_new
 
     # sampling topic
-    # 新しいトピックの場合、パラメータの領域を確保
+    # In the case of new topic, allocate resource for parameters
     def sampling_topic(self, p_k):
         drawing = numpy.random.multinomial(1, p_k / p_k.sum()).argmax()
         if drawing < len(self.topics):
@@ -285,9 +264,8 @@ class HDPLDA:
 
 def hdplda_learning(hdplda, iteration):
     for i in range(iteration):
-        print "-%d K=%d p=%f" % (i + 1, len(hdplda.topics), hdplda.perplexity())
         hdplda.inference()
-    print "K=%d perplexity=%f" % (len(hdplda.topics), hdplda.perplexity())
+        print "-%d K=%d p=%f" % (i + 1, len(hdplda.topics), hdplda.perplexity())
     return hdplda
 
 def main():
@@ -297,7 +275,7 @@ def main():
     parser.add_option("-c", dest="corpus", help="using range of Brown corpus' files(start:end)")
     parser.add_option("--alpha", dest="alpha", type="float", help="parameter alpha", default=numpy.random.gamma(1, 1))
     parser.add_option("--gamma", dest="gamma", type="float", help="parameter gamma", default=numpy.random.gamma(1, 1))
-    parser.add_option("--base", dest="base", type="float", help="parameter of base measure H", default=0.5)
+    parser.add_option("--beta", dest="base", type="float", help="parameter of beta measure H", default=0.5)
     parser.add_option("-k", dest="K", type="int", help="initial number of topics", default=1)
     parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=10)
     parser.add_option("-s", dest="stopwords", type="int", help="0=exclude stop words, 1=include stop words", default=1)
@@ -319,19 +297,21 @@ def main():
     docs = [voca.doc_to_ids(doc) for doc in corpus]
     if options.df > 0: docs = voca.cut_low_freq(docs, options.df)
 
-    hdplda = HDPLDA(options.K, options.alpha, options.gamma, options.base, docs, voca.size())
-    print "corpus=%d words=%d alpha=%f gamma=%f base=%f initK=%d stopwords=%d" % (len(corpus), len(voca.vocas), options.alpha, options.gamma, options.base, options.K, options.stopwords)
+    hdplda = HDPLDA(options.alpha, options.gamma, options.base, docs, voca.size())
+    print "corpus=%d words=%d alpha=%.3f gamma=%.3f base=%.3f stopwords=%d" % (len(corpus), len(voca.vocas), options.alpha, options.gamma, options.base, options.stopwords)
     #hdplda.dump()
 
     #import cProfile
     #cProfile.runctx('hdplda_learning(hdplda, options.iteration)', globals(), locals(), 'hdplda.profile')
     hdplda_learning(hdplda, options.iteration)
 
+    """
     phi = hdplda.worddist()
     for k, phi_k in enumerate(phi):
         print "\n-- topic: %d" % k
         for w in numpy.argsort(-phi_k)[:20]:
             print "%s: %f" % (voca[w], phi_k[w])
+    """
 
 if __name__ == "__main__":
     main()
