@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# Labeled LDA using nltk.corpus.reuters as dataset
+# This code is available under the MIT License.
+# (c)2013 Nakatani Shuyo / Cybozu Labs Inc.
+
 import sys, string, random, numpy
 from nltk.corpus import reuters
 from llda import LLDA
