@@ -37,8 +37,9 @@ llda.set_corpus(labelset, corpus, labels)
 print "M=%d, V=%d, L=%d, K=%d" % (len(corpus), len(llda.vocas), len(labelset), options.K)
 
 for i in range(options.iteration):
-    sys.stderr.write("-- %d \n" % (i + 1))
+    sys.stderr.write("-- %d : %.4f\n" % (i, llda.perplexity()))
     llda.inference()
+print "perplexity : %.4f" % llda.perplexity()
 
 phi = llda.phi()
 for k, label in enumerate(labelset):

@@ -58,7 +58,7 @@ class LLDA:
 
         self.vocas = []
         self.vocas_id = dict()
-        self.labels = [self.complement_label(label) for label in labels]
+        self.labels = numpy.array([self.complement_label(label) for label in labels])
         self.docs = [[self.term_to_id(term) for term in doc] for doc in corpus]
 
         M = len(corpus)
@@ -103,8 +103,22 @@ class LLDA:
         V = len(self.vocas)
         return (self.n_z_t + self.beta) / (self.n_z[:, numpy.newaxis] + V * self.beta)
 
-    def perplexity(self, doc):
-        pass
+    def theta(self):
+        """document-topic distribution"""
+        n_alpha = self.n_m_z + self.labels * self.alpha
+        return n_alpha / n_alpha.sum(axis=1)[:, numpy.newaxis]
+
+    def perplexity(self, docs=None):
+        if docs == None: docs = self.docs
+        phi = self.phi()
+        thetas = self.theta()
+
+        log_per = N = 0
+        for doc, theta in zip(docs, thetas):
+            for w in doc:
+                log_per -= numpy.log(numpy.inner(phi[:,w], theta))
+            N += len(doc)
+        return numpy.exp(log_per / N)
 
 def main():
     parser = OptionParser()
