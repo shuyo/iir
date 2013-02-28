@@ -19,6 +19,7 @@ parser.add_option("-s", dest="seed", type="int", help="random seed", default=Non
 parser.add_option("-n", dest="samplesize", type="int", help="dataset sample size", default=100)
 (options, args) = parser.parse_args()
 random.seed(options.seed)
+numpy.random.seed(options.seed)
 
 idlist = random.sample(reuters.fileids(), options.samplesize)
 
