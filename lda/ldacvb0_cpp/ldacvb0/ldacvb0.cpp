@@ -13,9 +13,7 @@
 
 int main(int argc, char* argv[]) {
 	std::string filename = "C:/works/iir/lda/ali.txt";
-
 	std::ifstream ifs(filename, std::ios::binary);
-	//cybozu::String str(std::istreambuf_iterator<char>(ifs.rdbuf()), std::istreambuf_iterator<char>());
 	while (ifs) {
 		std::string st;
 		ifs >> st;

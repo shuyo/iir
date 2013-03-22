@@ -18,11 +18,16 @@ namespace std {
 #else
 #include <regex>
 #endif
+#include <algorithm>
 #include <string>
 #include <unordered_map>
 #include <cybozu/string.hpp>
+#include <cybozu/string_operation.hpp>
 #include <cybozu/mmap.hpp>
 
+/*
+ id and counter of vocabulary
+*/
 class idcount {
 public:
 	size_t id;
@@ -31,47 +36,58 @@ public:
 	idcount(size_t id_, int count_) : id(id_), count(count_) {}
 };
 
-template <class String>
+/*
+ vocabulary
+*/
+template <class KEY>
 class vocabularies {
 private:
-	std::vector<String> vocalist;
-	std::unordered_map<String, idcount > voca;
+	std::vector<KEY> vocalist;
+	std::unordered_map<KEY, idcount> voca;
 
 public:
-	void operator()(const String &word) {
-		//auto s = std::tolower
-		if (voca.find(word) != voca.end()) {
-			voca[word].count += 1;
+	void operator()(const KEY &word) {
+		KEY key(word);
+		normalize(key);
+		if (voca.find(key) != voca.end()) {
+			voca[key].count += 1;
 		} else {
-			voca[word] = idcount(vocalist.size(), 1);
-			vocalist.push_back(word);
+			voca[key] = idcount(vocalist.size(), 1);
+			vocalist.push_back(key);
 		}
 	}
 	int size() const {
 		return vocalist.size();
 	}
+
+	int count(const KEY &word) {
+		return voca[word].count;
+	}
+
+	static void normalize(KEY &s) {
+		cybozu::ToLower(s);
+	}
 };
 
 std::regex rexword("[a-zA-Z]+");
 
-template <class T>
-void eachwords(const char* p, const char* end, T& func) {
-	std::regex_token_iterator<const char*> i( p, end, rexword ), iend;
+/*
+ call the procedure for each word (mmap)
+ */
+template <class T, class CHAR>
+void eachwords(const CHAR* p, const CHAR* end, T& func) {
+	std::regex_token_iterator<const CHAR*> i( p, end, rexword ), iend;
 	while (i != iend) {
 		func(*i++);
 	}
-/*
-	std::match_results<const char*> what;
-	while (std::regex_search(p, end, what, r)) {
-		std::string w(what[0].first, what[0].second);
-		func(w.c_str());
-		p = what[0].second;
-	}*/
 };
 
-template <class T>
-void eachwords(std::string st, T& func) {
-	std::regex_token_iterator<std::string::iterator> i( st.begin(), st.end(), rexword ), iend;
+/*
+ call the procedure for each word (std::string, cybozu::String)
+ */
+template <class T, class STRING>
+void eachwords(STRING st, T& func) {
+	std::regex_token_iterator<STRING::iterator> i( st.begin(), st.end(), rexword ), iend;
 	while (i != iend) {
 		func(*i++);
 	}
@@ -84,29 +100,10 @@ template <class T> void loadeachwords(std::string filename, T& func) {
 		const char *p = map.get();
 		const char *end = p + map.size();
 		eachwords(p, end, func);
+
 	} catch (std::exception& e) {
 		printf("%s\n", e.what());
 	}
-
-
-	/*
-	auto i = std::sregex_iterator(st.get(), st.get() + st.size(),  "[A-Za-z]+");
-	auto iend = std::sregex_iterator();
-	for (; i!=iend; ++i) {
-		std::smatch m = *i;
-		std::cout << m.str() << "/";
-	}
-	*/
-
-/*
-	//cybozu::String str(std::istreambuf_iterator<char>(ifs.rdbuf()), std::istreambuf_iterator<char>());
-	while (ifs) {
-		std::string st;
-		ifs >> st;
-		std::cout << st << "/";
-	}
-	*/
-
 }
 
 class LDA_CVB0 {
