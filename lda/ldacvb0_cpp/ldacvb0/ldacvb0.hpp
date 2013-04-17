@@ -32,6 +32,18 @@ namespace cybozu {
 namespace ldacvb0 {
 
 
+/*
+	unordered_map increment for key (utility function)
+*/
+template <class S, class T>
+inline void inc(std::unordered_map<S, T> &map, const S &key) {
+	auto x = map.find(key);
+	if (x != map.end()) {
+		x->second += 1;
+	} else {
+		map[key] = 1;
+	}
+}
 
 
 /*
@@ -64,10 +76,11 @@ public:
 };
 
 
+const double ALPHA_THRESHOLD = 0.001;
+
 /*
 	Sampler from Dirichlet Distribution
 */
-const double MIN = 0.001;
 class dirichlet_distribution {
 private:
 	std::mt19937 generator;
@@ -83,6 +96,10 @@ public:
 			dirichlet_distribution();
 		}
 	}
+
+	/*
+		draw from symmetric dirichlet distribution
+	*/
 	void draw(Vec& vec, const int K, const double alpha) {
 		std::gamma_distribution<double> distribution(alpha, 1.0);
 		if (vec.size() != K) vec.resize(K);
@@ -95,12 +112,16 @@ public:
 			*i /= sum;
 		}
 	}
+
+	/*
+		draw from asymmetric dirichlet distribution
+	*/
 	void draw(Vec& vec, const Vec& alpha) {
 		if (vec.size() != alpha.size()) vec.resize(alpha.size());
 		double sum = 0;
 		auto i = vec.begin(), iend = vec.end();
 		for (auto a = alpha.begin();i!=iend;++i,++a) {
-			if (*a>MIN) {
+			if (*a > ALPHA_THRESHOLD) {
 				std::gamma_distribution<double> distribution(*a, 1.0);
 				sum += *i = distribution(generator);
 			} else {
@@ -118,62 +139,15 @@ public:
 /*
 
 */
-const std::regex rexword("(\\S+)/\\S+");
-
 const std::string STOPWORDS_[] = {"the", "of", "and", "at", "so", "a", "i", "one" ,"may", "but", "also", "that", "in", "for", "to", "it", "on", "as", "with", "from", "an", "by", "this", "or", "have", "be", "all", "not",
 "no", "any", "which", "had", "was", "been", "only", "such", "are", "these", "them", "other", "two", "is", "take", "has", "they", "some", "will", "its", "into", "when", "there", "his", "more", "than", "he", "who", "would", "up", "out", "were", "first", "time", "what", "made", "then", "can", "about", "over", "their", "if", "even",
 "you", "my", "me", "we", "do", "your", "like", "our", "could", "him", "man", "know", "see", "now", "very", "just", "years", "way", "us", "never",
 "men", "down", "back", "said", "off", "though", "came", "away", "again", "against", "before", "get", "still", "new", "many",
-"good", "how", "much", "each", "most", "make", "long", "little", "should", "where", "under", "both", "here",
+"good", "how", "much", "each", "most", "make", "long", "little", "should", "where", "under", "both", "here", "however", "since", "without", "enough", "because", "does",
 "because", "own", "being", "did", "well", "through", "too", "those", "after", "she", "her", "come", "might", "few", "another", "himself", "between", "why", "am", "always", "nothing", "got", "going", "must",
-"i'm", "i'll", "don't", "didn't"};
-
-/*
-
-[topic 140]
-year	220	701	0.0138434
-university	86	224	0.0111295
-great	291	666	0.00802565
-school	140	496	0.00730239
-during	265	585	0.00668247
-while	329	680	0.0060898
-often	206	369	0.00572025
-every	274	491	0.00511144
-almost	256	432	0.00509078
-set	235	415	0.00508447
-same	336	686	0.00502589
-special	155	250	0.00466388
-fact	233	447	0.00459556
-become	209	359	0.00455742
-best	227	352	0.00445423
-performance	65	122	0.00441623
-college	78	269	0.00433846
-others	212	323	0.00432374
-times	194	300	0.00428213
-early	209	366	0.00419036
-
-[topic 171]
-right	265	613	0.0119862
-go	275	626	0.01026
-mr	148	844	0.00906082
-something	222	450	0.00867626
-wasn't	83	154	0.00779252
-think	219	433	0.00754351
-went	222	507	0.00749453
-want	172	328	0.00666444
-she'd	20	68	0.00629034
-thought	237	517	0.00615435
-wanted	129	226	0.00615119
-couldn't	92	175	0.00613035
-looked	170	367	0.00602287
-sure	168	263	0.00601362
-say	242	504	0.00601181
-i'd	57	104	0.00597094
-yes	89	144	0.00591194
-let	222	453	0.00587024
-i've	76	125	0.00585789
-maybe	74	133	0.00575668
-*/
+"during", "while", "often", "every", "almost", "same", "become", "best", "others", "something", "set", "go", "think", "went", "say",
+"three", "around",
+"i'm", "i'll", "don't", "didn't", "wasn't", "she'd", "couldn't", "i'd", "i've"};
 
 const std::unordered_set<std::string> STOPWORDS(&STOPWORDS_[0], &STOPWORDS_[sizeof(STOPWORDS_)/sizeof(STOPWORDS_[0])]);
 
@@ -234,12 +208,17 @@ public:
 		size_t len = s.size();
 		if (len>1 && s.compare(len-1, len, ".")==0) {
 			s.resize(len-1);
+		} else if (len>1 && s.compare(len-1, len, ",")==0) {
+			s.resize(len-1);
 		} else if (len>2 && s.compare(len-2, len, "'s")==0) {
 			s.resize(len-2);
 		}
 
 	}
 };
+
+const std::regex REXWORD("(\\S+)");
+const std::regex REXWORD_WITH_POS("(\\S+)/\\S+");
 
 /*
 doocument loader
@@ -252,21 +231,19 @@ public:
 	std::unordered_map<size_t, int> docfreq;
 
 private:
+	const std::regex &rexword;
+
 	template <class T> void addeachword(std::regex_iterator<T> i) {
 		std::unordered_map<size_t, int> count;
 		std::regex_iterator<T> iend;
 		for (; i != iend; ++i) {
 			const std::string& w = (*i)[1].str();
+			if (w.length() <= 2) continue;
 			char c = w[0];
 			if (c < 'A' || (c > 'Z' && c < 'a') || c > 'z') continue;
 			size_t id = vocabularies.add(w);
 			if (id == SIZE_MAX) continue;
-			auto x = count.find(id);
-			if (x != count.end()) {
-				x->second += 1;
-			} else {
-				count[id] = 1;
-			}
+			inc(count, id);
 		}
 
 		if (count.size()==0) return;
@@ -277,18 +254,15 @@ private:
 		for (;j!=jend;++j) {
 			doc.push_back(Term(j->first, j->second));
 			N += j->second;
-			auto df = docfreq.find(j->first);
-			if (df!=docfreq.end()) {
-				df->second += 1;
-			} else {
-				docfreq[j->first] = 1;
-			}
+			inc(docfreq, j->first);
 		}
 	}
 
 public:
-	Documents() : N(0) {
+	Documents() : N(0), rexword(REXWORD) {
 		// TODO : stop words
+	}
+	Documents(const std::regex &r) : N(0), rexword(r) {
 	}
 
 	bool add(const CHAR* p, const CHAR* end) {
@@ -351,6 +325,8 @@ inline void update_for_word(
 	LDA model and CVB0 inference
 */
 class LDA_CVB0 {
+private:
+	mutable Vec phi;	// for worddist at perplecity calcuration
 public:
 	int K_, V_;
 	double alpha_;
@@ -371,47 +347,38 @@ public:
 
 			cybozu::ldacvb0::dirichlet_distribution dd(1U);
 
-			auto j = docs_.begin(), jend = docs_.end();
-			auto j_jk = n_jk->begin();
 			Vec aph(K);
 			auto aend = aph.end();
-			for (;j!=jend;++j) {
-				auto i = j->begin(), iend = j->end();
-				for (;i!=iend;++i) {
+			auto j_jk = n_jk->begin();
+			for (auto j = docs_.begin(), jend = docs_.end(); j != jend; ++j) {
+				for (auto i = j->begin(), iend = j->end();i!=iend;++i) {
 					size_t w = i->id;
 					int freq = i->freq;
 
 					double sum = 0;
-					{
-						auto i_wk = n_wk->begin() + w * K;
-						auto i_jk = j_jk;
-						auto i_k = n_k->begin();
-						for (auto ai = aph.begin();ai!=aend;++ai,++i_wk,++i_jk,++i_k) {
-							sum += *ai = *i_wk * *i_jk / *i_k;
-						}
+					for (auto ai = aph.begin(), i_wk = n_wk->begin() + w * K, i_jk = j_jk, i_k = n_k->begin();
+							ai != aend; ++ai, ++i_wk, ++i_jk, ++i_k) {
+						sum += *ai = *i_wk * *i_jk / *i_k;
 					}
 					sum = alpha / sum;
 					for (auto ai = aph.begin(); ai != aend; ++ai) {
 						*ai *= sum;
-						//if (*ai<0.00001) *ai = 0.00001;
 					}
 
 					gamma_jik.push_back(Vec());
 					Vec& gamma = gamma_jik.back();
 					dd.draw(gamma, aph);
 
-					auto gi = gamma.begin(), gend = gamma.end();
-					auto i_wk = n_wk->begin() + w * K;
-					auto i_jk = j_jk;
-					auto i_k = n_k->begin();
-					for (;gi!=gend;++gi,++i_wk,++i_jk,++i_k) {
+					for (auto gi = gamma.begin(), gend = gamma.end(),
+							i_wk = n_wk->begin() + w * K, i_jk = j_jk, i_k = n_k->begin();
+							gi != gend; ++gi, ++i_wk, ++i_jk, ++i_k) {
 						double g = *gi * freq;
 						*i_wk += g;
 						*i_jk += g;
 						*i_k += g;
 					}
 				}
-				j_jk+=K;
+				j_jk += K;
 			}
 	}
 
@@ -451,11 +418,13 @@ public:
 	}
 
 	void worddist(Vec& dist) const {
-		dist.clear();
-		auto i = n_wk->begin(), iend = n_wk->end(), jend = n_k->end();
+		if (dist.size() != V_ * K_) {
+			dist.resize(V_ * K_);
+		}
+		auto i = n_wk->begin(), iend = n_wk->end(), jend = n_k->end(), d = dist.begin();
 		while(i != iend) {
-			for (auto j = n_k->begin();j!=jend;++j,++i) {
-				dist.push_back(*i / *j);
+			for (auto j = n_k->begin();j!=jend;++j,++i,++d) {
+				*d = *i / *j;
 			}
 		}
 	}
@@ -479,8 +448,6 @@ public:
 	}
 
 	double perplexity (const Documents<std::string, char>& docs) const {
-
-		Vec phi;
 		worddist(phi);
 
 		double loglikelihood = 0;
