@@ -1,0 +1,29 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ldacvb0", "ldacvb0\ldacvb0.vcxproj", "{7E7F27E1-8399-470B-A9F5-877EC4E8BA25}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ldacvb0_test", "ldacvb0_test\ldacvb0_test.vcxproj", "{CEDDBB13-7042-4FF1-8956-4F7ED0B0E1A7}"
+	ProjectSection(ProjectDependencies) = postProject
+		{7E7F27E1-8399-470B-A9F5-877EC4E8BA25} = {7E7F27E1-8399-470B-A9F5-877EC4E8BA25}
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7E7F27E1-8399-470B-A9F5-877EC4E8BA25}.Debug|Win32.ActiveCfg = Debug|Win32
+		{7E7F27E1-8399-470B-A9F5-877EC4E8BA25}.Debug|Win32.Build.0 = Debug|Win32
+		{7E7F27E1-8399-470B-A9F5-877EC4E8BA25}.Release|Win32.ActiveCfg = Release|Win32
+		{7E7F27E1-8399-470B-A9F5-877EC4E8BA25}.Release|Win32.Build.0 = Release|Win32
+		{CEDDBB13-7042-4FF1-8956-4F7ED0B0E1A7}.Debug|Win32.ActiveCfg = Debug|Win32
+		{CEDDBB13-7042-4FF1-8956-4F7ED0B0E1A7}.Debug|Win32.Build.0 = Debug|Win32
+		{CEDDBB13-7042-4FF1-8956-4F7ED0B0E1A7}.Release|Win32.ActiveCfg = Release|Win32
+		{CEDDBB13-7042-4FF1-8956-4F7ED0B0E1A7}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
