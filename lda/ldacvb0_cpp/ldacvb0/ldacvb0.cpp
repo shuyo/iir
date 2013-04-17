@@ -27,14 +27,24 @@ void printnwk(const cybozu::ldacvb0::LDA_CVB0& model, const std::string& word) {
 	std::cout << ")" << std::endl;
 }
 
+template <class STRING, class CHAR>
+void printHighFreqWords(const cybozu::ldacvb0::Documents<STRING, CHAR> &docs) {
+	for(auto df=docs.docfreq.begin(), dfend = docs.docfreq.end(); df!=dfend; ++df) {
+		if (df->second > (int)M/2) {
+			std::cout << docs.vocabularies.vocalist[df->first] << " " << df->second << std::endl;
+		}
+	}
+}
+
 
 int main(int argc, char* argv[]) {
 
-	int K = 13, I = 100, N_WORDS = 20;
+	int K = 20, I = 100, N_WORDS = 20;
 	double alpha = 0.1;
 	double beta = 0.01;
+	bool isCorpusWithPos = false;
 
-	cybozu::ldacvb0::Documents<std::string, char> docs;
+	std::vector<std::string> files;
 
 	for(int i=1;i<argc;++i) {
 		std::string st(argv[i]);
@@ -55,10 +65,19 @@ int main(int argc, char* argv[]) {
 		} else if (st == "-b") {
 			if (++i>=argc) goto ERROR_OPT_B;
 			beta = atof(argv[i]);
-
+		} else if (st == "-p") {
+			isCorpusWithPos = true;
 		} else {
+			files.push_back(st);
+		}
+	}
+
+	{
+		cybozu::ldacvb0::Documents<std::string, char> docs(isCorpusWithPos?cybozu::ldacvb0::REXWORD_WITH_POS:cybozu::ldacvb0::REXWORD);
+
+		for(auto i=files.begin(), iend=files.end();i!=iend;++i) {
 			try {
-				cybozu::Mmap map(st);
+				cybozu::Mmap map(*i);
 				const char *p = map.get();
 				const char *end = p + map.size();
 				docs.add(p, end);
@@ -66,26 +85,16 @@ int main(int argc, char* argv[]) {
 				printf("%s\n", e.what());
 			}
 		}
-	}
 
-	size_t V = docs.vocabularies.size();
-	size_t M = docs.size();
-	if (V <= 0) goto ERROR_NO_VOCA;
+		size_t V = docs.vocabularies.size();
+		size_t M = docs.size();
+		if (V <= 0) goto ERROR_NO_VOCA;
 
-	std::cout << "M = " << M;
-	std::cout << ", N = " << docs.N;
-	std::cout << ", V = " << V << std::endl;
-	std::cout << "K = " << K << ", alpha = " << alpha << ", beta = " << beta << std::endl;
+		std::cout << "M = " << M;
+		std::cout << ", N = " << docs.N;
+		std::cout << ", V = " << V << std::endl;
+		std::cout << "K = " << K << ", alpha = " << alpha << ", beta = " << beta << std::endl;
 
-	/*
-	for(auto df=docs.docfreq.begin(), dfend = docs.docfreq.end(); df!=dfend; ++df) {
-		if (df->second > (int)M/2) {
-			std::cout << docs.vocabularies.vocalist[df->first] << " " << df->second << std::endl;
-		}
-	}
-	*/
-
-	{
 		cybozu::ldacvb0::LDA_CVB0 model(K, V, alpha, beta, docs);
 
 		for(int i=0;i<I;++i) {
