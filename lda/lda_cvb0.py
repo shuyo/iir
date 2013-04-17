@@ -137,7 +137,7 @@ def main():
     if options.df > 0: docs = voca.cut_low_freq(docs, options.df)
 
     lda = LDA_CVB0(options.K, options.alpha, options.beta, docs, voca.size(), options.smartinit)
-    print "corpus=%d, words=%d, K=%d, a=%f, b=%f" % (len(corpus), len(voca.vocas), options.K, options.alpha, options.beta)
+    print "corpus=%d, words=%d, voca=%d, K=%d, a=%f, b=%f" % (len(corpus), lda.N, len(voca.vocas), options.K, options.alpha, options.beta)
 
     #import cProfile
     #cProfile.runctx('lda_learning(lda, options.iteration, voca)', globals(), locals(), 'lda.profile')
