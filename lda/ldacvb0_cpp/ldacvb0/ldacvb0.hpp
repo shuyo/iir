@@ -228,7 +228,7 @@ class Documents : public std::vector<Document> {
 public:
 	Vocabularies<STRING> vocabularies;
 	int N;
-	std::unordered_map<size_t, int> docfreq;
+	std::unordered_map<size_t, size_t> docfreq;
 
 private:
 	const std::regex &rexword;
@@ -280,11 +280,43 @@ public:
 
 
 
+template <class STRING, class CHAR>
+void truncDocFreq(Documents<STRING, CHAR> &docs, const Documents<STRING, CHAR> &orgdocs, size_t ldf, size_t udf) {
+	std::unordered_map<size_t, size_t> conv;
+	for (auto i=orgdocs.docfreq.begin(), iend=orgdocs.docfreq.end();i!=iend;++i) {
+		size_t df = i->second;
+		if (df <= ldf || df >= udf) continue;
+
+		size_t oldid = i->first;
+		size_t newid = docs.vocabularies.vocalist.size();
+		const std::string &w = orgdocs.vocabularies.vocalist[oldid];
+		int c = orgdocs.vocabularies.voca.at(w).count;
+
+		conv[oldid] = newid;
+		docs.vocabularies.vocalist.push_back(w);
+		docs.vocabularies.voca[w] = IdCount(newid, c);
+		docs.N += c;
+		docs.docfreq[newid] = df;
+	}
+
+	for (auto j=orgdocs.begin(), jend=orgdocs.end();j!=jend;++j) {
+		docs.push_back(Document());
+		Document &doc = docs.back();
+		for (auto i=j->begin(), iend=j->end();i!=iend;++i) {
+			auto x = conv.find(i->id);
+			if (x!=conv.end()) {
+				doc.push_back(Term(conv.at(i->id), i->freq));
+			}
+		}
+	}
+}
+
+
 
 /*
 
 */
-void parameter_init(Vec& n_wk, Vec& n_jk, Vec& n_k, const Documents<std::string, char>& docs, const int K) {
+void parameter_init(Vec& n_wk, Vec& n_jk, Vec& n_k, const Documents<std::string, char>& docs, const size_t K) {
 	const size_t M = docs.size();
 	const size_t V = docs.vocabularies.size();
 	n_wk.resize(V*K);
@@ -297,7 +329,7 @@ inline void update_for_word(
 	Vec& gamma_k,
 	Vec::iterator i_wk_buf, Vec::iterator i_jk_buf, Vec::iterator i_k_buf,
 	Vec::const_iterator i_wk, Vec::const_iterator i_jk, Vec::const_iterator i_k,
-	const size_t w, const int freq, const int K
+	const size_t w, const int freq, const size_t K
 	) {
 		i_wk += w * K;
 		i_wk_buf += w * K;
@@ -328,14 +360,14 @@ class LDA_CVB0 {
 private:
 	mutable Vec phi;	// for worddist at perplecity calcuration
 public:
-	int K_, V_;
+	size_t K_, V_;
 	double alpha_;
 	double beta_;
 	Vec n_wk1, n_wk2, n_jk1, n_jk2, n_k1, n_k2;
 	Vec *n_wk, *n_wk_buf, *n_jk, *n_jk_buf, *n_k, *n_k_buf;
 	Mat gamma_jik;
 	const Documents<std::string, char>& docs_;
-	LDA_CVB0(int K, int V, double alpha, double beta, const Documents<std::string, char>& docs) :
+	LDA_CVB0(size_t K, size_t V, double alpha, double beta, const Documents<std::string, char>& docs) :
 	K_(K), V_(V), alpha_(alpha), beta_(beta), docs_(docs),
 		n_wk(&n_wk1), n_wk_buf(&n_wk2), n_jk(&n_jk1), n_jk_buf(&n_jk2), n_k(&n_k1), n_k_buf(&n_k2) {
 			parameter_init(n_wk1, n_jk1, n_k1, docs, K);
@@ -356,7 +388,7 @@ public:
 					int freq = i->freq;
 
 					double sum = 0;
-					for (auto ai = aph.begin(), i_wk = n_wk->begin() + w * K, i_jk = j_jk, i_k = n_k->begin();
+					for (Vec::iterator ai = aph.begin(), i_wk = n_wk->begin() + w * K, i_jk = j_jk, i_k = n_k->begin();
 							ai != aend; ++ai, ++i_wk, ++i_jk, ++i_k) {
 						sum += *ai = *i_wk * *i_jk / *i_k;
 					}
@@ -369,7 +401,7 @@ public:
 					Vec& gamma = gamma_jik.back();
 					dd.draw(gamma, aph);
 
-					for (auto gi = gamma.begin(), gend = gamma.end(),
+					for (Vec::iterator gi = gamma.begin(), gend = gamma.end(),
 							i_wk = n_wk->begin() + w * K, i_jk = j_jk, i_k = n_k->begin();
 							gi != gend; ++gi, ++i_wk, ++i_jk, ++i_k) {
 						double g = *gi * freq;
@@ -434,10 +466,10 @@ public:
 		auto i = n_jk->begin(), iend = n_jk->end();
 		while(i!=iend) {
 			double sum = 0;
-			for (int k=0;k<K_;++k) {
+			for (size_t k=0;k<K_;++k) {
 				sum += *(i+k);
 			}
-			for (int k=0;k<K_;++k) {
+			for (size_t k=0;k<K_;++k) {
 				dist.push_back(*i++/sum);
 			}
 		}
@@ -457,7 +489,7 @@ public:
 		auto vend = vec.end();
 		for(;j!=jend;++j) {
 			double sum = 0;
-			for(int k=0;k<K_;++k) sum += *(i_jk+k);
+			for(size_t k=0;k<K_;++k) sum += *(i_jk+k);
 			for(auto v = vec.begin(); v!=vend; ++v) {
 				*v = *i_jk++ / sum;
 			}

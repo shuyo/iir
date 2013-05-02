@@ -21,7 +21,7 @@ void printnwk(const cybozu::ldacvb0::LDA_CVB0& model, const std::string& word) {
 
 	std::cout << "[" << word << "]" << std::endl;
 	std::cout << "( ";
-	for (int k=0;k<model.K_;++k) {
+	for (size_t k=0;k<model.K_;++k) {
 		std::cout << *(i+k) << " ";
 	}
 	std::cout << ")" << std::endl;
@@ -40,6 +40,7 @@ void printHighFreqWords(const cybozu::ldacvb0::Documents<STRING, CHAR> &docs) {
 int main(int argc, char* argv[]) {
 
 	int K = 20, I = 100, N_WORDS = 20;
+	size_t ldf = 1, udf = 0; // lower and upper limit of document frequency
 	double alpha = 0.1;
 	double beta = 0.01;
 	bool isCorpusWithPos = false;
@@ -59,6 +60,12 @@ int main(int argc, char* argv[]) {
 		} else if (st == "-n") {
 			if (++i>=argc) goto ERROR_OPT_N;
 			N_WORDS = atoi(argv[i]);
+		} else if (st == "--ldf") {
+			if (++i>=argc) goto ERROR_OPT_DF;
+			ldf = atoi(argv[i]);
+		} else if (st == "--udf") {
+			if (++i>=argc) goto ERROR_OPT_DF;
+			udf = atoi(argv[i]);
 		} else if (st == "-a") {
 			if (++i>=argc) goto ERROR_OPT_A;
 			alpha = atof(argv[i]);
@@ -73,26 +80,32 @@ int main(int argc, char* argv[]) {
 	}
 
 	{
-		cybozu::ldacvb0::Documents<std::string, char> docs(isCorpusWithPos?cybozu::ldacvb0::REXWORD_WITH_POS:cybozu::ldacvb0::REXWORD);
+		cybozu::ldacvb0::Documents<std::string, char> orgdocs(isCorpusWithPos?cybozu::ldacvb0::REXWORD_WITH_POS:cybozu::ldacvb0::REXWORD), docs;
 
 		for(auto i=files.begin(), iend=files.end();i!=iend;++i) {
 			try {
 				cybozu::Mmap map(*i);
 				const char *p = map.get();
 				const char *end = p + map.size();
-				docs.add(p, end);
+				orgdocs.add(p, end);
 			} catch (std::exception& e) {
 				printf("%s\n", e.what());
 			}
 		}
 
+		size_t M = orgdocs.size();
+		size_t orgV = orgdocs.vocabularies.size();
+		if (orgV <= 0) goto ERROR_NO_VOCA;
+
+		if (udf == 0) udf = M / 2;
+		truncDocFreq(docs, orgdocs, ldf, udf);
+
 		size_t V = docs.vocabularies.size();
-		size_t M = docs.size();
 		if (V <= 0) goto ERROR_NO_VOCA;
 
 		std::cout << "M = " << M;
 		std::cout << ", N = " << docs.N;
-		std::cout << ", V = " << V << std::endl;
+		std::cout << ", V = " << V << " / " << orgV << std::endl;
 		std::cout << "K = " << K << ", alpha = " << alpha << ", beta = " << beta << std::endl;
 
 		cybozu::ldacvb0::LDA_CVB0 model(K, V, alpha, beta, docs);
@@ -161,6 +174,9 @@ ERROR_OPT_I:
 	goto ERROR_EXIT;
 ERROR_OPT_N:
 	p = "[ERROR] -n option needs positive integer";
+	goto ERROR_EXIT;
+ERROR_OPT_DF:
+	p = "[ERROR] --ldf/udf option needs integer";
 	goto ERROR_EXIT;
 ERROR_OPT_A:
 	p = "[ERROR] -a option needs positive real number";

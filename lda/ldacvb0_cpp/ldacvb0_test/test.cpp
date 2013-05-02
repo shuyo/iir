@@ -151,7 +151,7 @@ CYBOZU_TEST_AUTO(test_lda_cvb0_initialization)
 	docs.vocabularies.add("b");	// 1
 	docs.vocabularies.add("c");	// 2
 
-	int V = docs.vocabularies.size();
+	size_t V = docs.vocabularies.size();
 	CYBOZU_TEST_EQUAL(V, 3);
 
 	{
