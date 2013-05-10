@@ -18,13 +18,13 @@ CYBOZU_TEST_AUTO(test_vocabularies_for_std_string)
 "	The/at jury/nn further/rbr said/vbd in/in term-end/nn presentments/nns that/cs the/at City/nn-tl Executive/jj-tl Committee/nn-tl ,/, "
 "which/wdt had/hvd over-all/jj charge/nn of/in the/at election/nn ,/, ``/`` deserves/vbz the/at praise/nn and/cc thanks/nns of/in the/at "
 "City/nn-tl of/in-tl Atlanta/np-tl ''/'' for/in the/at manner/nn in/in which/wdt the/at election/nn was/bedz conducted/vbn ./.";
-	cybozu::ldacvb0::Documents<std::string, char> d(cybozu::ldacvb0::REXWORD_WITH_POS);
+	cybozu::ldacvb0::Documents<std::string, char> d(cybozu::ldacvb0::REXWORD_WITH_POS, true);
 	d.add(st);
 	cybozu::ldacvb0::Vocabularies<std::string>& v = d.vocabularies;
-	CYBOZU_TEST_EQUAL(v.size(), 42);
+	CYBOZU_TEST_EQUAL(v.size(), 37);
 	CYBOZU_TEST_EQUAL(v.count("the"), 8);
 	CYBOZU_TEST_EQUAL(v.count("tHE"), 8);
-	CYBOZU_TEST_EQUAL(v.count("in"), 2);
+	CYBOZU_TEST_EQUAL(v.count("in"), 0);
 	CYBOZU_TEST_EQUAL(v.count("grand"), 1);
 
 	CYBOZU_TEST_EQUAL(v.count("the/at"), 0);
@@ -146,7 +146,7 @@ void printgamma(const cybozu::ldacvb0::Mat& gamma) {
 
 CYBOZU_TEST_AUTO(test_lda_cvb0_initialization)
 {
-	Documents<std::string, char> docs;
+	Documents<std::string, char> docs(cybozu::ldacvb0::REXWORD, true);
 	docs.vocabularies.add("a");	// 0
 	docs.vocabularies.add("b");	// 1
 	docs.vocabularies.add("c");	// 2

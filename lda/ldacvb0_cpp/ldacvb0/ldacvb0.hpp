@@ -154,14 +154,18 @@ identify and count freaquency of vocabulary
 */
 template <class WORD>
 class Vocabularies {
+	bool uses_stopwords;
 public:
 	std::vector<WORD> vocalist;
 	std::unordered_map<WORD, IdCount> voca;
 
+	Vocabularies() : uses_stopwords(true) {}
+	Vocabularies(bool excludes_stopwords) : uses_stopwords(!excludes_stopwords) {}
+
 	size_t add(const WORD &word) {
 		WORD key(word);
 		normalize(key);
-		if (STOPWORDS.find(key)!=STOPWORDS.end()) return SIZE_MAX;
+		if (uses_stopwords && STOPWORDS.find(key)!=STOPWORDS.end()) return SIZE_MAX;
 		auto x = voca.find(key);
 		if (x != voca.end()) {
 			x->second.count += 1;
@@ -258,9 +262,10 @@ private:
 
 public:
 	Documents() : N(0), rexword(REXWORD) {
-		// TODO : stop words
 	}
 	Documents(const std::regex &r) : N(0), rexword(r) {
+	}
+	Documents(const std::regex &r, bool excludes_stopwords) : N(0), rexword(r), vocabularies(excludes_stopwords) {
 	}
 
 	bool add(const CHAR* p, const CHAR* end) {
