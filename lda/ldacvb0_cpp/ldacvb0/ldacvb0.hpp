@@ -23,8 +23,6 @@ namespace std {
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
-#include <vector>
-#include <cybozu/mmap.hpp>
 #include <cybozu/string.hpp>
 #include <cybozu/string_operation.hpp>
 
@@ -363,32 +361,30 @@ public:
 	size_t K_, V_;
 	double alpha_;
 	double beta_;
-	Vec n_wk1, n_wk2, n_jk1, n_jk2, n_k1, n_k2;
-	Vec *n_wk, *n_wk_buf, *n_jk, *n_jk_buf, *n_k, *n_k_buf;
+	Vec n_wk, n_wk_buf, n_jk, n_jk_buf, n_k, n_k_buf;
 	Mat gamma_jik;
 	const Documents<std::string, char>& docs_;
 	LDA_CVB0(size_t K, size_t V, double alpha, double beta, const Documents<std::string, char>& docs) :
-	K_(K), V_(V), alpha_(alpha), beta_(beta), docs_(docs),
-		n_wk(&n_wk1), n_wk_buf(&n_wk2), n_jk(&n_jk1), n_jk_buf(&n_jk2), n_k(&n_k1), n_k_buf(&n_k2) {
-			parameter_init(n_wk1, n_jk1, n_k1, docs, K);
-			parameter_init(n_wk2, n_jk2, n_k2, docs, K);
+	K_(K), V_(V), alpha_(alpha), beta_(beta), docs_(docs) {
+			parameter_init(n_wk, n_jk, n_k, docs, K);
+			parameter_init(n_wk_buf, n_jk_buf, n_k_buf, docs, K);
 
-			std::fill(n_wk->begin(), n_wk->end(), beta_);
-			std::fill(n_jk->begin(), n_jk->end(), alpha_);
-			std::fill(n_k->begin(), n_k->end(), beta_ * V_);
+			std::fill(n_wk.begin(), n_wk.end(), beta_);
+			std::fill(n_jk.begin(), n_jk.end(), alpha_);
+			std::fill(n_k.begin(), n_k.end(), beta_ * V_);
 
 			cybozu::ldacvb0::dirichlet_distribution dd(1U);
 
 			Vec aph(K);
 			auto aend = aph.end();
-			auto j_jk = n_jk->begin();
+			auto j_jk = n_jk.begin();
 			for (auto j = docs_.begin(), jend = docs_.end(); j != jend; ++j) {
 				for (auto i = j->begin(), iend = j->end();i!=iend;++i) {
 					size_t w = i->id;
 					int freq = i->freq;
 
 					double sum = 0;
-					for (Vec::iterator ai = aph.begin(), i_wk = n_wk->begin() + w * K, i_jk = j_jk, i_k = n_k->begin();
+					for (Vec::iterator ai = aph.begin(), i_wk = n_wk.begin() + w * K, i_jk = j_jk, i_k = n_k.begin();
 							ai != aend; ++ai, ++i_wk, ++i_jk, ++i_k) {
 						sum += *ai = *i_wk * *i_jk / *i_k;
 					}
@@ -402,7 +398,7 @@ public:
 					dd.draw(gamma, aph);
 
 					for (Vec::iterator gi = gamma.begin(), gend = gamma.end(),
-							i_wk = n_wk->begin() + w * K, i_jk = j_jk, i_k = n_k->begin();
+							i_wk = n_wk.begin() + w * K, i_jk = j_jk, i_k = n_k.begin();
 							gi != gend; ++gi, ++i_wk, ++i_jk, ++i_k) {
 						double g = *gi * freq;
 						*i_wk += g;
@@ -415,14 +411,14 @@ public:
 	}
 
 	void learn() {
-		std::fill(n_wk_buf->begin(), n_wk_buf->end(), beta_);
-		std::fill(n_jk_buf->begin(), n_jk_buf->end(), alpha_);
-		std::fill(n_k_buf->begin(), n_k_buf->end(), beta_ * V_);
+		std::fill(n_wk_buf.begin(), n_wk_buf.end(), beta_);
+		std::fill(n_jk_buf.begin(), n_jk_buf.end(), alpha_);
+		std::fill(n_k_buf.begin(), n_k_buf.end(), beta_ * V_);
 
 		auto gamma_k = gamma_jik.begin();
 		auto j = docs_.begin(), jend = docs_.end();
-		auto j_jk = n_jk->begin();
-		auto j_jk_buf = n_jk_buf->begin();
+		auto j_jk = n_jk.begin();
+		auto j_jk_buf = n_jk_buf.begin();
 		for (;j!=jend;++j) {
 			auto i = j->begin(), iend = j->end();
 			for (;i!=iend;++i) {
@@ -432,8 +428,8 @@ public:
 
 				update_for_word(
 					*gamma_k,
-					n_wk_buf->begin(), j_jk_buf, n_k_buf->begin(),
-					n_wk->begin(), j_jk, n_k->begin(),
+					n_wk_buf.begin(), j_jk_buf, n_k_buf.begin(),
+					n_wk.begin(), j_jk, n_k.begin(),
 					w, freq, K_
 					);
 
@@ -444,18 +440,19 @@ public:
 
 		}
 
-		{auto x = n_wk; n_wk = n_wk_buf; n_wk_buf = x;}
-		{auto x = n_jk; n_jk = n_jk_buf; n_jk_buf = x;}
-		{auto x = n_k; n_k = n_k_buf; n_k_buf = x;}
+		n_wk.swap(n_wk_buf);
+		n_jk.swap(n_jk_buf);
+		n_k.swap(n_k_buf);
 	}
 
 	void worddist(Vec& dist) const {
 		if (dist.size() != V_ * K_) {
 			dist.resize(V_ * K_);
 		}
-		auto i = n_wk->begin(), iend = n_wk->end(), jend = n_k->end(), d = dist.begin();
+		auto i = n_wk.begin(), iend = n_wk.end(), jend = n_k.end();
+		auto d = dist.begin();
 		while(i != iend) {
-			for (auto j = n_k->begin();j!=jend;++j,++i,++d) {
+			for (auto j = n_k.begin();j!=jend;++j,++i,++d) {
 				*d = *i / *j;
 			}
 		}
@@ -463,7 +460,7 @@ public:
 
 	void docdist(Vec& dist) const {
 		dist.clear();
-		auto i = n_jk->begin(), iend = n_jk->end();
+		auto i = n_jk.begin(), iend = n_jk.end();
 		while(i!=iend) {
 			double sum = 0;
 			for (size_t k=0;k<K_;++k) {
@@ -484,7 +481,7 @@ public:
 
 		double loglikelihood = 0;
 		auto j = docs.begin(), jend = docs.end();
-		auto i_jk = n_jk->begin();
+		auto i_jk = n_jk.begin();
 		Vec vec(K_);
 		auto vend = vec.end();
 		for(;j!=jend;++j) {

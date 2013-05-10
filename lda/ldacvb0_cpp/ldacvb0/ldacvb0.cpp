@@ -11,13 +11,14 @@ This code is licensed under the MIT license.
 #include <fstream>
 #include <cstdlib>
 #include "cybozu/string.hpp"
+#include <cybozu/mmap.hpp>
 #include <cybozu/nlp/top_score.hpp>
 #include "ldacvb0.hpp"
 
 void printnwk(const cybozu::ldacvb0::LDA_CVB0& model, const std::string& word) {
 	auto voca = model.docs_.vocabularies;
 	size_t w = voca.id(word);
-	auto i = model.n_wk->begin()+ w * model.K_;
+	auto i = model.n_wk.begin()+ w * model.K_;
 
 	std::cout << "[" << word << "]" << std::endl;
 	std::cout << "( ";
@@ -49,7 +50,6 @@ int main(int argc, char* argv[]) {
 
 	for(int i=1;i<argc;++i) {
 		std::string st(argv[i]);
-		//std::cout << filename << std::endl;
 
 		if (st == "-k") {
 			if (++i>=argc) goto ERROR_OPT_K;
@@ -190,6 +190,6 @@ ERROR_NO_VOCA:
 
 ERROR_EXIT:
 	std::cerr << p << std::endl;
-	exit(1);
+	return 1;
 
 }

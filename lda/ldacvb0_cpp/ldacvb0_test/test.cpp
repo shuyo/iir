@@ -219,44 +219,39 @@ CYBOZU_TEST_AUTO(test_lda_cvb0_initialization)
 	CYBOZU_TEST_NEAR(g[6][2], 0.00087242, 1e-8);
 	*/
 
-	CYBOZU_TEST_EQUAL(model.n_k->size(), K);
+	CYBOZU_TEST_EQUAL(model.n_k.size(), K);
 	double vb = V * beta;
-	CYBOZU_TEST_NEAR(model.n_k->at(0), vb+g[0][0]*2+g[1][0]+g[2][0]+g[3][0]*2+g[4][0]+g[5][0]+g[6][0], 1e-6);
-	CYBOZU_TEST_NEAR(model.n_k->at(1), vb+g[0][1]*2+g[1][1]+g[2][1]+g[3][1]*2+g[4][1]+g[5][1]+g[6][1], 1e-6);
-	CYBOZU_TEST_NEAR(model.n_k->at(2), vb+g[0][2]*2+g[1][2]+g[2][2]+g[3][2]*2+g[4][2]+g[5][2]+g[6][2], 1e-6);
+	CYBOZU_TEST_NEAR(model.n_k.at(0), vb+g[0][0]*2+g[1][0]+g[2][0]+g[3][0]*2+g[4][0]+g[5][0]+g[6][0], 1e-6);
+	CYBOZU_TEST_NEAR(model.n_k.at(1), vb+g[0][1]*2+g[1][1]+g[2][1]+g[3][1]*2+g[4][1]+g[5][1]+g[6][1], 1e-6);
+	CYBOZU_TEST_NEAR(model.n_k.at(2), vb+g[0][2]*2+g[1][2]+g[2][2]+g[3][2]*2+g[4][2]+g[5][2]+g[6][2], 1e-6);
 
-	CYBOZU_TEST_EQUAL(model.n_jk->size(), M * K);
-	CYBOZU_TEST_NEAR(model.n_jk->at(0), alpha+g[0][0]*2+g[1][0], 1e-6);
-	CYBOZU_TEST_NEAR(model.n_jk->at(1), alpha+g[0][1]*2+g[1][1], 1e-6);
-	CYBOZU_TEST_NEAR(model.n_jk->at(2), alpha+g[0][2]*2+g[1][2], 1e-6);
-	CYBOZU_TEST_NEAR(model.n_jk->at(3), alpha+g[2][0]+g[3][0]*2, 1e-6);
-	CYBOZU_TEST_NEAR(model.n_jk->at(4), alpha+g[2][1]+g[3][1]*2, 1e-6);
-	CYBOZU_TEST_NEAR(model.n_jk->at(5), alpha+g[2][2]+g[3][2]*2, 1e-6);
-	CYBOZU_TEST_NEAR(model.n_jk->at(6), alpha+g[4][0]+g[5][0]+g[6][0], 1e-6);
-	CYBOZU_TEST_NEAR(model.n_jk->at(7), alpha+g[4][1]+g[5][1]+g[6][1], 1e-6);
-	CYBOZU_TEST_NEAR(model.n_jk->at(8), alpha+g[4][2]+g[5][2]+g[6][2], 1e-6);
+	CYBOZU_TEST_EQUAL(model.n_jk.size(), M * K);
+	CYBOZU_TEST_NEAR(model.n_jk.at(0), alpha+g[0][0]*2+g[1][0], 1e-6);
+	CYBOZU_TEST_NEAR(model.n_jk.at(1), alpha+g[0][1]*2+g[1][1], 1e-6);
+	CYBOZU_TEST_NEAR(model.n_jk.at(2), alpha+g[0][2]*2+g[1][2], 1e-6);
+	CYBOZU_TEST_NEAR(model.n_jk.at(3), alpha+g[2][0]+g[3][0]*2, 1e-6);
+	CYBOZU_TEST_NEAR(model.n_jk.at(4), alpha+g[2][1]+g[3][1]*2, 1e-6);
+	CYBOZU_TEST_NEAR(model.n_jk.at(5), alpha+g[2][2]+g[3][2]*2, 1e-6);
+	CYBOZU_TEST_NEAR(model.n_jk.at(6), alpha+g[4][0]+g[5][0]+g[6][0], 1e-6);
+	CYBOZU_TEST_NEAR(model.n_jk.at(7), alpha+g[4][1]+g[5][1]+g[6][1], 1e-6);
+	CYBOZU_TEST_NEAR(model.n_jk.at(8), alpha+g[4][2]+g[5][2]+g[6][2], 1e-6);
 
-	CYBOZU_TEST_EQUAL(model.n_wk->size(), V * K);
-	CYBOZU_TEST_NEAR(model.n_wk->at(0), beta+g[0][0]*2+g[2][0]+g[4][0], 1e-6);
-	CYBOZU_TEST_NEAR(model.n_wk->at(1), beta+g[0][1]*2+g[2][1]+g[4][1], 1e-6);
-	CYBOZU_TEST_NEAR(model.n_wk->at(2), beta+g[0][2]*2+g[2][2]+g[4][2], 1e-6);
-	CYBOZU_TEST_NEAR(model.n_wk->at(3), beta+g[1][0]+g[5][0], 1e-6);
-	CYBOZU_TEST_NEAR(model.n_wk->at(4), beta+g[1][1]+g[5][1], 1e-6);
-	CYBOZU_TEST_NEAR(model.n_wk->at(5), beta+g[1][2]+g[5][2], 1e-6);
-	CYBOZU_TEST_NEAR(model.n_wk->at(6), beta+g[3][0]*2+g[6][0], 1e-6);
-	CYBOZU_TEST_NEAR(model.n_wk->at(7), beta+g[3][1]*2+g[6][1], 1e-6);
-	CYBOZU_TEST_NEAR(model.n_wk->at(8), beta+g[3][2]*2+g[6][2], 1e-6);
+	CYBOZU_TEST_EQUAL(model.n_wk.size(), V * K);
+	CYBOZU_TEST_NEAR(model.n_wk.at(0), beta+g[0][0]*2+g[2][0]+g[4][0], 1e-6);
+	CYBOZU_TEST_NEAR(model.n_wk.at(1), beta+g[0][1]*2+g[2][1]+g[4][1], 1e-6);
+	CYBOZU_TEST_NEAR(model.n_wk.at(2), beta+g[0][2]*2+g[2][2]+g[4][2], 1e-6);
+	CYBOZU_TEST_NEAR(model.n_wk.at(3), beta+g[1][0]+g[5][0], 1e-6);
+	CYBOZU_TEST_NEAR(model.n_wk.at(4), beta+g[1][1]+g[5][1], 1e-6);
+	CYBOZU_TEST_NEAR(model.n_wk.at(5), beta+g[1][2]+g[5][2], 1e-6);
+	CYBOZU_TEST_NEAR(model.n_wk.at(6), beta+g[3][0]*2+g[6][0], 1e-6);
+	CYBOZU_TEST_NEAR(model.n_wk.at(7), beta+g[3][1]*2+g[6][1], 1e-6);
+	CYBOZU_TEST_NEAR(model.n_wk.at(8), beta+g[3][2]*2+g[6][2], 1e-6);
 
-	//std::cout << "n_k1 : " << &model.n_k1;
-	//printvec(model.n_k1);
-	//std::cout << "n_k2 : " << &model.n_k2;
-	//printvec(model.n_k2);
 	std::cout << "n_wk : ";
-	printvec(*model.n_wk);
+	printvec(model.n_wk);
 	std::cout << "n_jk : ";
-	printvec(*model.n_jk);
-	std::cout << "n_k : " << model.n_k;
-	printvec(*model.n_k);
+	printvec(model.n_jk);
+	printvec(model.n_k);
 	std::cout << "perplexity : " << model.perplexity() << std::endl;
 
 	model.learn();
@@ -268,11 +263,10 @@ CYBOZU_TEST_AUTO(test_lda_cvb0_initialization)
 	//std::cout << "n_k2 : " << &model.n_k2;
 	//printvec(model.n_k2);
 	std::cout << "n_wk : ";
-	printvec(*model.n_wk);
+	printvec(model.n_wk);
 	std::cout << "n_jk : ";
-	printvec(*model.n_jk);
-	std::cout << "n_k : " << model.n_k;
-	printvec(*model.n_k);
+	printvec(model.n_jk);
+	printvec(model.n_k);
 	std::cout << "perplexity : " << model.perplexity() << std::endl;
 
 	model.learn();
@@ -282,11 +276,10 @@ CYBOZU_TEST_AUTO(test_lda_cvb0_initialization)
 	//std::cout << "n_k2 : " << &model.n_k2;
 	//printvec(model.n_k2);
 	std::cout << "n_wk : ";
-	printvec(*model.n_wk);
+	printvec(model.n_wk);
 	std::cout << "n_jk : ";
-	printvec(*model.n_jk);
-	std::cout << "n_k : " << model.n_k;
-	printvec(*model.n_k);
+	printvec(model.n_jk);
+	printvec(model.n_k);
 	std::cout << "perplexity : " << model.perplexity() << std::endl;
 
 }
