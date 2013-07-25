@@ -2,6 +2,8 @@
 # encode: utf-8
 
 # n-Gram Language Model with Knerser-Ney Smoother
+# This code is available under the MIT License.
+# (c)2012 Nakatani Shuyo / Cybozu Labs Inc.
 
 import sys, codecs, re, numpy
 
