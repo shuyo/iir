@@ -9,13 +9,20 @@ import re, collections, numpy
 from nltk.corpus import reuters
 from nltk.stem import WordNetLemmatizer
 
+categories = ['crude', 'money-fx', 'trade', 'interest', 'ship', 'wheat', 'corn']
 
-crude = set(reuters.fileids('crude'))
-grain = set(reuters.fileids('grain'))
-intersection = crude.intersection(grain)
-fileids = list(crude - intersection) + list(grain - intersection)
-labels = numpy.zeros(len(fileids), dtype=int)
-labels[0:len(crude)-len(intersection)] = 1
+map = dict()
+intersection = set()
+for x, catname in enumerate(categories):
+    for id in reuters.fileids(catname):
+        if id in map:
+            intersection.add(id)
+        else:
+            map[id] = x
+for id in intersection:
+    del map[id]
+fileids = map.keys()
+labels = numpy.array(map.values())
 
 voca = dict()
 vocalist = []
@@ -33,7 +40,9 @@ for id in fileids:
             doc[voca[w]] += 1
     if len(doc) == 0: print id
     doclist.append(doc)
-print len(voca), len(doclist)
+print "document size : %d" % len(doclist)
+print "vocaburary size : %d" % len(voca)
+
 
 data = numpy.zeros((len(doclist), len(voca)))
 for j, doc in enumerate(doclist):
@@ -49,7 +58,8 @@ def activelearn(data, label, strategy, train):
     for x in train: pool.remove(x)
 
     predict = None
-    while len(train) < 30:
+    precisions = []
+    while len(train) < 300:
         if predict != None:
             if strategy == "random":
                 x = numpy.random.randint(len(pool))
@@ -79,7 +89,9 @@ def activelearn(data, label, strategy, train):
         perplexity = numpy.exp(-log_likelihood / Z)
         print "%d : %d / %d = %f, %f" % (len(train), correct, Z, precision, perplexity)
 
-    return precision, perplexity
+        precisions.append(precision)
+
+    return precisions
 
 from sklearn.linear_model import LogisticRegression
 cl = LogisticRegression()
@@ -87,7 +99,12 @@ cl = LogisticRegression()
 N_CLASS = labels.max() + 1
 train = [numpy.random.choice((labels==k).nonzero()[0]) for k in xrange(N_CLASS)]
 
-print activelearn(data, labels, "random", train)
-print activelearn(data, labels, "least confident", train)
-print activelearn(data, labels, "margin sampling", train)
-print activelearn(data, labels, "entropy-based", train)
+
+methods = ["random", "least confident", "margin sampling", "entropy-based"]
+results = []
+for x in methods:
+    results.append(activelearn(data, labels, x, train))
+print "\t%s" % "\t".join(methods)
+d = len(categories)
+for i in xrange(len(results[0])):
+    print "%d\t%s" % (i+d, "\t".join("%f" % x[i] for x in results))

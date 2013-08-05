@@ -20,7 +20,7 @@ numpy.random.seed(opt.seed)
 output = False
 
 def activelearn(data, label, strategy):
-    print strategy
+    #print strategy
 
     N, D = data.shape
     train = list(range(D))
@@ -64,12 +64,13 @@ def activelearn(data, label, strategy):
         import matplotlib.pyplot as plt
         plt.plot(data[pool,0], data[pool,1], 'x', color="red")
         plt.plot(data[train,0], data[train,1], 'o', color="red")
+        plt.title(strategy)
         plt.show()
 
     return precision, perplexity
 
 
-D=5
+D=10
 N=1000
 presicions = []
 perplexities = []
