@@ -5,44 +5,14 @@
 # This code is available under the MIT License.
 # (c)2013 Nakatani Shuyo / Cybozu Labs Inc.
 
-import re, collections, numpy
-from nltk.corpus import reuters
-from nltk.stem import WordNetLemmatizer
+import numpy
+import dataset
+from sklearn.linear_model import LogisticRegression
 
 categories = ['crude', 'money-fx', 'trade', 'interest', 'ship', 'wheat', 'corn']
-
-map = dict()
-intersection = set()
-for x, catname in enumerate(categories):
-    for id in reuters.fileids(catname):
-        if id in map:
-            intersection.add(id)
-        else:
-            map[id] = x
-for id in intersection:
-    del map[id]
-fileids = map.keys()
-labels = numpy.array(map.values())
-
-voca = dict()
-vocalist = []
-doclist = []
-realphabet = re.compile('^[a-z]+$')
-wnl = WordNetLemmatizer()
-for id in fileids:
-    doc = collections.defaultdict(int)
-    for w in reuters.words(id):
-        w = wnl.lemmatize(w.lower())
-        if realphabet.match(w):
-            if w not in voca:
-                voca[w] = len(vocalist)
-                vocalist.append(w)
-            doc[voca[w]] += 1
-    if len(doc) == 0: print id
-    doclist.append(doc)
+doclist, labels, voca, vocalist = dataset.load(categories)
 print "document size : %d" % len(doclist)
 print "vocaburary size : %d" % len(voca)
-
 
 data = numpy.zeros((len(doclist), len(voca)))
 for j, doc in enumerate(doclist):
@@ -53,7 +23,7 @@ def activelearn(data, label, strategy, train):
     print strategy
 
     N, D = data.shape
-    train = list(train)
+    train = list(train) # copy initial indexes of training
     pool = range(N)
     for x in train: pool.remove(x)
 
@@ -74,7 +44,6 @@ def activelearn(data, label, strategy, train):
             del pool[x]
 
         cl = LogisticRegression()
-        #cl = LogisticRegression(C=0.1, penalty="l1")
         cl.fit(data[train,:], label[train])
         predict = cl.predict_log_proba(data[pool,:])
         log_likelihood = 0
@@ -93,12 +62,8 @@ def activelearn(data, label, strategy, train):
 
     return precisions
 
-from sklearn.linear_model import LogisticRegression
-cl = LogisticRegression()
-
 N_CLASS = labels.max() + 1
 train = [numpy.random.choice((labels==k).nonzero()[0]) for k in xrange(N_CLASS)]
-
 
 methods = ["random", "least confident", "margin sampling", "entropy-based"]
 results = []
