@@ -13,16 +13,61 @@ import numpy
 import sklearn.datasets
 from sklearn.feature_extraction.text import CountVectorizer
 
+def performance(i, test, phi, theta):
+    z = test.data * numpy.log(phi) + numpy.log(theta) # M * K
+    z -= z.max(axis=1)[:, None]
+    z = numpy.exp(z)
+    z /= z.sum(axis=1)[:, None]
+    predict = z.argmax(axis=1)
+    correct = (test.target == predict).sum()
+    T = test.data.shape[0]
+    accuracy = float(correct) / T
+    log_likelihood = numpy.log(numpy.choose(test.target, z.T)+0.000001).sum() / T
+
+    print "%d : %d / %d = %.3f, average of log likelihood = %.3f" % (i, correct, T, accuracy, log_likelihood)
+    return accuracy
+
+def estimate(data, test, alpha, beta, n):
+    M, V = data.data.shape
+    K = data.target.max() + 1
+    #if opt.training:
+    #    train = [int(x) for x in opt.training.split(",")]
+    #else:
+    train = []
+    for k in xrange(K):
+        train.extend(numpy.random.choice((data.target==k).nonzero()[0], n))
+
+    theta = numpy.ones(K) / K
+    phi0 = numpy.zeros((V, K)) + beta
+    for n in train:
+        phi0[:, data.target[n]] += data.data[n, :].toarray().flatten()
+    phi = phi0 / phi0.sum(axis=0)
+    accuracy0 = performance(0, test, phi, theta)
+
+    for i in xrange(20):
+        # E-step
+        z = data.data * numpy.log(phi) + numpy.log(theta) # M * K
+        z -= z.max(axis=1)[:, None]
+        z = numpy.exp(z)
+        z /= z.sum(axis=1)[:, None]
+
+        # M-step
+        theta = z.sum(axis=0) + alpha
+        theta /= theta.sum()
+        phi = phi0 + data.data.T * z
+        phi = phi / phi.sum(axis=0)
+
+        accuracy = performance(i+1, test, phi, theta)
+
+    return len(train), accuracy0, accuracy
+
 def main():
     parser = optparse.OptionParser()
-    """
-    parser.add_option("-r", dest="method_random", action="store_true", help="use random sampling", default=False)
-    parser.add_option("-n", dest="max_train", type="int", help="max size of training", default=300)
-    """
 
     parser.add_option("-a", dest="alpha", type="float", help="parameter alpha", default=0.05)
     parser.add_option("-b", dest="beta", type="float", help="parameter beta", default=0.001)
-    parser.add_option("-t", dest="training", help="specify indexes of training", default=None)
+    #parser.add_option("-n", dest="n", type="int", help="training size for each label", default=1)
+    #parser.add_option("-t", dest="training", help="specify indexes of training", default=None)
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
     (opt, args) = parser.parse_args()
     numpy.random.seed(opt.seed)
@@ -37,43 +82,11 @@ def main():
     print "(data size, voca size) : (%d, %d)" % data.data.shape
     print "(test size, voca size) : (%d, %d)" % test.data.shape
 
-    M, V = data.data.shape
-    T = test.data.shape[0]
-    K = data.target.max() + 1
-    if opt.training:
-        train = [int(x) for x in opt.training.split(",")]
-    else:
-        train = [numpy.random.choice((data.target==k).nonzero()[0]) for k in xrange(K)]
-
-    theta = numpy.ones(K) / K
-    phi0 = numpy.zeros((V, K)) + opt.beta
-    for n in train:
-        phi0[:, data.target[n]] += data.data[n, :].toarray().flatten()
-    phi = phi0 / phi0.sum(axis=1)[:, None]
-
-    for i in xrange(20):
-        # E-step
-        z = data.data * numpy.log(phi) + numpy.log(theta) # M * K
-        z -= z.max(axis=1)[:, None]
-        z = numpy.exp(z)
-        z /= z.sum(axis=1)[:, None]
-
-        # M-step
-        theta = z.sum(axis=0) + opt.alpha
-        theta /= theta.sum()
-        phi = phi0 + data.data.T * z
-        phi = phi / phi.sum(axis=1)[:, None]
-
-        # predict
-        z = test.data * numpy.log(phi) + numpy.log(theta) # M * K
-        z -= z.max(axis=1)[:, None]
-        z = numpy.exp(z)
-        z /= z.sum(axis=1)[:, None]
-        predict = z.argmax(axis=1)
-        correct = (test.target == predict).sum()
-        log_likelihood = -numpy.log(numpy.choose(test.target, z.T)).sum()
-
-        print "%d : %d / %d = %.3f, log likelihood = %.3f" % (i, correct, T, float(correct) / T, log_likelihood)
+    result = []
+    for n in xrange(20):
+        result.append(estimate(data, test, opt.alpha, opt.beta, n+1))
+    for x in result:
+        print x
 
 if __name__ == "__main__":
     main()
