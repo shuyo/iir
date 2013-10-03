@@ -13,6 +13,7 @@ import numpy
 import scipy.sparse
 import sklearn.datasets
 from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import MultinomialNB
 
 def activelearn(data, test, train, pool, classifier_factory, max_train, seed):
     numpy.random.seed(seed)
@@ -72,9 +73,10 @@ def main():
     parser.add_option("--lr1", dest="logistic_l1", type="float", help="use logistic regression with l1-regularity", default=None)
     parser.add_option("--lr2", dest="logistic_l2", type="float", help="use logistic regression with l2-regularity", default=None)
 
-    parser.add_option("-K", dest="class_size", type="int", help="number of class", default=None)
-    parser.add_option("-n", dest="max_train", type="int", help="max size of training", default=30)
+    parser.add_option("-K", dest="class_size", type="int", help="number of class", default=4)
+    parser.add_option("-n", dest="max_train", type="int", help="max size of training", default=100)
     parser.add_option("-t", dest="training", help="specify indexes of training", default=None)
+    parser.add_option("-N", dest="trying", type="int", help="number of trying", default=100)
 
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
     (opt, args) = parser.parse_args()
@@ -107,8 +109,9 @@ def main():
     elif opt.logistic_l2:
         print "Logistic Regression with L2-regularity : C = %f" % opt.logistic_l2
         classifier_factory = lambda: LogisticRegression(C=opt.logistic_l2)
-    else:
-        pass
+    elif opt.naive_bayes:
+        print "Naive Bayes Classifier : alpha = %f" % opt.naive_bayes
+        classifier_factory = lambda: MultinomialNB(alpha=opt.naive_bayes)
 
     if classifier_factory:
         test = sklearn.datasets.fetch_20newsgroups_vectorized(subset='test')
@@ -122,10 +125,16 @@ def main():
 
         print "score for all data: %f" % classifier_factory().fit(data.data, data.target).score(test.data, test.target)
 
-        results = activelearn(data, test, train, pool, classifier_factory, opt.max_train, opt.seed)
+        for n in xrange(opt.trying):
+            print "trying.. %d" % n
+            train = [numpy.random.choice((data.target==k).nonzero()[0]) for k in xrange(N_CLASS)]
+            pool = range(data.data.shape[0])
+            for x in train: pool.remove(x)
+            results = activelearn(data, test, train, pool, classifier_factory, opt.max_train, opt.seed)
 
-        for x in results:
-            print "%d\t%f" % x
+            with open("output_mmms_%d_%d.txt" % (opt.class_size, opt.max_train), "ab") as f:
+                f.write("\t".join("%f" % x[1] for x in results))
+                f.write("\n")
 
 if __name__ == "__main__":
     main()

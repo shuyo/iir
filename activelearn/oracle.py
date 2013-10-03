@@ -13,7 +13,7 @@ import sklearn.datasets
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB
 
-def activelearn(data, test, train, pool, classifier_factory, max_train, seed):
+def activelearn(data, test, train, pool, classifier_factory, max_train, n_candidate, seed):
     numpy.random.seed(seed)
 
     # copy initial indexes of training and pool
@@ -27,7 +27,11 @@ def activelearn(data, test, train, pool, classifier_factory, max_train, seed):
         if len(accuracies) > 0:
             i_star = None
             max_score = 0.0
-            for i, x in enumerate(pool):
+            candidate = pool
+            if 0 < n_candidate < len(pool):
+                numpy.random.shuffle(pool)
+                candidate = pool[:n_candidate]
+            for i, x in enumerate(candidate):
                 t = train + [x]
                 s = classifier_factory().fit(data.data[t, :], data.target[t]).score(test.data, test.target)
                 if max_score < s:
@@ -53,6 +57,7 @@ def main():
     parser.add_option("-K", dest="class_size", type="int", help="number of class", default=None)
     parser.add_option("-n", dest="max_train", type="int", help="max size of training", default=30)
     parser.add_option("-t", dest="training", help="specify indexes of training", default=None)
+    parser.add_option("-T", dest="candidate", type="int", help="candidate size", default=-1)
 
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
     (opt, args) = parser.parse_args()
@@ -101,7 +106,7 @@ def main():
 
         print "score for all data: %f" % classifier_factory().fit(data.data, data.target).score(test.data, test.target)
 
-        results = activelearn(data, test, train, pool, classifier_factory, opt.max_train, opt.seed)
+        results = activelearn(data, test, train, pool, classifier_factory, opt.max_train, opt.candidate, opt.seed)
 
         for x in results:
             print "%d\t%f" % x

@@ -11,7 +11,7 @@ import sklearn.datasets
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB
 
-def activelearn(results, data, test, strategy, train, pool, classifier_factories, max_train):
+def activelearn(results, data, test, strategy, train, pool, classifier_factories, max_train, densities):
     print strategy
 
     # copy initial indexes of training and pool
@@ -28,11 +28,18 @@ def activelearn(results, data, test, strategy, train, pool, classifier_factories
                 if strategy == "vote entropy":
                     p = numpy.array([c.predict(data.data[pool,:]) for c in classifiers])
                     # This is equivalent to Vote Entropy when # of classifiers = 3
-                    x = ((p[:,0:2]==p[:,1:3]).sum(axis=1) + (p[:,0]==p[:,2])).argmin()
+                    x = ((p[:,0:2]==p[:,1:3]).sum(axis=1) + (p[:,0]==p[:,2]))
                 elif strategy == "average KL":
-                    predict = numpy.array([c.predict_proba(data.data[pool,:]) for c in classifiers]) # 3 * N * K
-                    pc = predict.mean(axis=0) # N * K
-                    x = numpy.nan_to_num(predict * numpy.log(predict / pc)).sum(axis=2).sum(axis=0).argmax()
+                    p = numpy.array([c.predict_proba(data.data[pool,:]) for c in classifiers]) # 3 * N * K
+                    pc = p.mean(axis=0) # N * K
+                    x = numpy.nan_to_num(p * numpy.log(pc / p)).sum(axis=2).sum(axis=0)
+                elif strategy == "qbc+margin sampling":
+                    p = numpy.array([c.predict_proba(data.data[pool,:]) for c in classifiers]) # 3 * N * K
+                    pc = p.mean(axis=0) # N * K
+                    pc.sort(axis=1)
+                    x = pc[:,-1] - pc[:,-2]
+                if densities != None: x *= densities[pool]
+                x = x.argmin()
             train.append(pool[x])
             del pool[x]
 
@@ -54,6 +61,8 @@ def main():
 
     parser.add_option("-n", dest="max_train", type="int", help="max size of training", default=300)
     parser.add_option("-t", dest="training", help="specify indexes of training", default=None)
+
+    parser.add_option("-b", dest="beta", type="float", help="density importance", default=0)
 
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
     (opt, args) = parser.parse_args()
@@ -87,10 +96,14 @@ def main():
         test = sklearn.datasets.fetch_20newsgroups_vectorized(subset='test')
         print "(test size, voca size) : (%d, %d)" % test.data.shape
 
-        methods = ["random", "vote entropy", "average KL", ]
+        densities = None
+        if opt.beta > 0:
+            densities = (data.data * data.data.T).mean(axis=0).A[0] ** opt.beta
+
+        methods = ["random", "vote entropy", "average KL", "qbc+margin sampling", ]
         results = []
         for x in methods:
-            activelearn(results, data, test, x, train, pool, classifier_factories, opt.max_train)
+            activelearn(results, data, test, x, train, pool, classifier_factories, opt.max_train, densities)
 
         print "\t%s" % "\t".join(x[0] for x in results)
         d = len(train)

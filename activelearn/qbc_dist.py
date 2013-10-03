@@ -11,7 +11,7 @@ import sklearn.datasets
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB
 
-def activelearn(results, data, test, strategy, train, pool, classifier_factories, max_train, densities):
+def activelearn(data, test, strategy, train, pool, classifier_factories, max_train, densities):
     # copy initial indexes of training and pool
     train = list(train)
     pool = list(pool)
@@ -31,6 +31,11 @@ def activelearn(results, data, test, strategy, train, pool, classifier_factories
                     p = numpy.array([c.predict_proba(data.data[pool,:]) for c in classifiers]) # 3 * N * K
                     pc = p.mean(axis=0) # N * K
                     x = numpy.nan_to_num(p * numpy.log(pc / p)).sum(axis=2).sum(axis=0)
+                elif strategy == "qbc+margin sampling":
+                    p = numpy.array([c.predict_proba(data.data[pool,:]) for c in classifiers]) # 3 * N * K
+                    pc = p.mean(axis=0) # N * K
+                    pc.sort(axis=1)
+                    x = pc[:,-1] - pc[:,-2]
                 if densities != None: x *= densities[pool]
                 x = x.argmin()
             train.append(pool[x])
@@ -43,8 +48,7 @@ def activelearn(results, data, test, strategy, train, pool, classifier_factories
         accuracy = float(correct) / Z
         print "%d : %d / %d = %f" % (len(train), correct, Z, accuracy)
         accuracies.append(accuracy)
-
-    results.append((strategy, accuracies))
+    return accuracies
 
 def main():
     parser = optparse.OptionParser()
@@ -83,24 +87,20 @@ def main():
         if opt.beta > 0:
             densities = (data.data * data.data.T).mean(axis=0).A[0] ** opt.beta
 
-        methods = ["random", "vote entropy", "average KL", ]
+        methods = ["random", "vote entropy", "average KL", "qbc+margin sampling", ]
         results = []
-        for method in methods:
-            results = []
-            for n in xrange(opt.trying):
+        for n in xrange(opt.trying):
+            for method in methods:
                 print "%s : %d" % (method, n)
                 train = [numpy.random.choice((data.target==k).nonzero()[0]) for k in xrange(N_CLASS)]
                 pool = range(data.data.shape[0])
                 for x in train: pool.remove(x)
 
-                activelearn(results, data, test, method, train, pool, classifier_factories, opt.max_train, densities)
+                results = activelearn(data, test, method, train, pool, classifier_factories, opt.max_train, densities)
 
-            d = len(train)
-            with open("output_qbc_%s.txt" % method, "wb") as f:
-                f.write(method)
-                f.write("\n")
-                for i in xrange(len(results[0][1])):
-                    f.write("%d\t%s\n" % (i+d, "\t".join("%f" % x[1][i] for x in results)))
+                d = len(train)
+                with open("output_qbc_%d.txt" % opt.max_train, "ab") as f:
+                    f.write("%s\t%s\n" % (method, "\t".join("%f" % x for x in results)))
 
 
 if __name__ == "__main__":

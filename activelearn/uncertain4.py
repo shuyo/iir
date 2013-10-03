@@ -7,6 +7,7 @@
 
 import optparse
 import numpy
+import scipy.sparse
 import sklearn.datasets
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB
@@ -26,7 +27,7 @@ def activelearn(results, data, test, strategy, train, pool, classifier_factory, 
             else:
                 predict = cl.predict_proba(data.data[pool,:])
                 if strategy == "least confident":
-                    x = predict.max(axis=1)
+                    x = predict.max(axis=1)-1
                 elif strategy == "margin sampling":
                     predict.sort(axis=1)
                     x = (predict[:,-1] - predict[:,-2])
@@ -58,6 +59,7 @@ def main():
     parser.add_option("--lr1", dest="logistic_l1", type="float", help="use logistic regression with l1-regularity", default=None)
     parser.add_option("--lr2", dest="logistic_l2", type="float", help="use logistic regression with l2-regularity", default=None)
 
+    parser.add_option("-K", dest="class_size", type="int", help="number of class", default=None)
     parser.add_option("-n", dest="max_train", type="int", help="max size of training", default=300)
     parser.add_option("-t", dest="training", help="specify indexes of training", default=None)
 
@@ -76,6 +78,12 @@ def main():
     else:
         train = [numpy.random.choice((data.target==k).nonzero()[0]) for k in xrange(N_CLASS)]
     print "indexes of training set : ", ",".join("%d" % x for x in train)
+    if opt.class_size:
+        index = data.target < opt.class_size
+        a = data.data.toarray()[index, :]
+        data.data = scipy.sparse.csr_matrix(a)
+        data.target = data.target[index]
+        print "(shrinked train size, voca size) : (%d, %d)" % data.data.shape
 
     pool = range(data.data.shape[0])
     for x in train: pool.remove(x)
@@ -92,10 +100,16 @@ def main():
     if len(methods) > 0:
         test = sklearn.datasets.fetch_20newsgroups_vectorized(subset='test')
         print "(test size, voca size) : (%d, %d)" % test.data.shape
+        if opt.class_size:
+            index = test.target < opt.class_size
+            a = test.data.toarray()[index, :]
+            test.data = scipy.sparse.csr_matrix(a)
+            test.target = test.target[index]
+            print "(shrinked test size, voca size) : (%d, %d)" % test.data.shape
 
         densities = None
         if opt.beta > 0:
-            densities = ((data.data * data.data.T).sum(axis=0).A[0] - 1) ** opt.beta
+            densities = (data.data * data.data.T).mean(axis=0).A[0] ** opt.beta
 
         if opt.logistic_l1:
             print "Logistic Regression with L1-regularity : C = %f" % opt.logistic_l1
