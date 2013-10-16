@@ -9,7 +9,7 @@
 
 
 import optparse
-import numpy
+import numpy, scipy
 import sklearn.datasets
 from sklearn.feature_extraction.text import CountVectorizer
 
@@ -22,14 +22,15 @@ def performance(i, test, phi, theta):
     correct = (test.target == predict).sum()
     T = test.data.shape[0]
     accuracy = float(correct) / T
-    log_likelihood = numpy.log(numpy.choose(test.target, z.T)+0.000001).sum() / T
+    log_likelihood = numpy.log(numpy.choose(test.target, z.T) + 1e-14).sum() / T
 
     print "%d : %d / %d = %.3f, average of log likelihood = %.3f" % (i, correct, T, accuracy, log_likelihood)
     return accuracy
 
-def estimate(data, test, alpha, beta, n):
+def estimate(data, test, alpha, beta, n, K=None):
     M, V = data.data.shape
-    K = data.target.max() + 1
+    if not K:
+        K = data.target.max() + 1
     #if opt.training:
     #    train = [int(x) for x in opt.training.split(",")]
     #else:
@@ -64,6 +65,7 @@ def estimate(data, test, alpha, beta, n):
 def main():
     parser = optparse.OptionParser()
 
+    parser.add_option("-K", dest="class_size", type="int", help="number of class")
     parser.add_option("-a", dest="alpha", type="float", help="parameter alpha", default=0.05)
     parser.add_option("-b", dest="beta", type="float", help="parameter beta", default=0.001)
     #parser.add_option("-n", dest="n", type="int", help="training size for each label", default=1)
@@ -82,9 +84,25 @@ def main():
     print "(data size, voca size) : (%d, %d)" % data.data.shape
     print "(test size, voca size) : (%d, %d)" % test.data.shape
 
+    if opt.class_size:
+        """
+        index = data.target < opt.class_size
+        a = data.data.toarray()[index, :]
+        data.data = scipy.sparse.csr_matrix(a)
+        data.target = data.target[index]
+        print "(shrinked data size, voca size) : (%d, %d)" % data.data.shape
+        """
+
+        index = test.target < opt.class_size
+        a = test.data.toarray()[index, :]
+        test.data = scipy.sparse.csr_matrix(a)
+        test.target = test.target[index]
+        print "(shrinked test size, voca size) : (%d, %d)" % test.data.shape
+
+
     result = []
-    for n in xrange(20):
-        result.append(estimate(data, test, opt.alpha, opt.beta, n+1))
+    for n in xrange(50):
+        result.append(estimate(data, test, opt.alpha, opt.beta, n+1, 2))
     for x in result:
         print x
 
