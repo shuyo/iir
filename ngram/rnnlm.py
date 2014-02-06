@@ -14,8 +14,7 @@ class RNNLM:
         self.v = V
         self.U = numpy.random.randn(K, V)
         self.W = numpy.random.randn(K, K)
-        self.V = numpy.random.randn(V, K)
-
+        self.V = numpy.zeros((V, K)) #numpy.random.randn(V, K)
     def learn(self, docs, alpha=0.1):
         index = numpy.arange(len(docs))
         numpy.random.shuffle(index)
@@ -51,6 +50,15 @@ class RNNLM:
             N += len(doc)
         return log_like / N
 
+    def dist(self, w):
+        if w==0:
+            self.s = numpy.zeros(self.K)
+        else:
+            self.s = 1 / (numpy.exp(- numpy.dot(self.W, self.s) - self.U[:, w]) + 1)
+            z = numpy.dot(self.V, self.s)
+            y = numpy.exp(z - z.max())
+            return y / y.sum()
+
 class BIGRAM:
     def __init__(self, V, alpha=0.01):
         self.V = V
@@ -81,6 +89,7 @@ class BIGRAM:
                 if pre_w in self.count and w in self.count[pre_w]:
                     c = self.count[pre_w][w]
                 log_like -= numpy.log((c + self.alpha) / (self.amount[pre_w] + va))
+                pre_w = w
             N += len(doc)
         return log_like / N
 
@@ -88,9 +97,10 @@ class BIGRAM:
 def main():
     parser = optparse.OptionParser()
     parser.add_option("-c", dest="corpus", help="corpus module name under nltk.corpus (e.g. brown, reuters)", default='nps_chat')
-    parser.add_option("-r", dest="testrate", type="float", help="rate of test dataset in corpus", default=0.1)
+    parser.add_option("-a", dest="alpha", type="float", help="additive smoothing parameter of bigram", default=0.001)
     parser.add_option("-k", dest="K", type="int", help="size of hidden layer", default=10)
     parser.add_option("-i", dest="I", type="int", help="learning interval", default=10)
+    parser.add_option("-o", dest="output", help="output filename of rnnlm model")
     parser.add_option("--seed", dest="seed", type="int", help="random seed")
     (opt, args) = parser.parse_args()
 
@@ -121,20 +131,24 @@ def main():
 
     D = len(docs)
 
-    alpha = 0.01
-    print ">> BIGRAM(alpha=%f)" % alpha
-    model = BIGRAM(V, alpha)
+    print ">> BIGRAM(alpha=%f)" % opt.alpha
+    model = BIGRAM(V, opt.alpha)
     model.learn(docs)
     print model.perplexity(docs)
 
     print ">> RNNLM(K=%d)" % opt.K
     model = RNNLM(V, opt.K)
     print model.perplexity(docs)
-    intervals = [1.0, 0.5, 0.4, 0.3, 0.2, 0.1, 0.1, 0.1, 0.05]
+    intervals = [1.0, 0.5, 0.4, 0.3, 0.2]
     for i in xrange(opt.I):
-        a = intervals[i] if i < 9 else 0.01
+        a = intervals[i] if i < len(intervals) else 0.1
         model.learn(docs, a)
         print model.perplexity(docs)
+
+    if opt.output:
+        import cPickle
+        with open(opt.output, 'wb') as f:
+            cPickle.dump([model, voca, vocalist], f)
 
 """
     testids = set(random.sample(ids, int(D * opt.testrate)))
