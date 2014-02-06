@@ -12,9 +12,12 @@ class RNNLM:
     def __init__(self, V, K=10):
         self.K = K
         self.v = V
-        self.U = numpy.random.randn(K, V)
-        self.W = numpy.random.randn(K, K)
-        self.V = numpy.zeros((V, K)) #numpy.random.randn(V, K)
+        #self.U = numpy.random.randn(K, V) / 3
+        #self.W = numpy.random.randn(K, K) / 3
+        #self.V = numpy.random.randn(V, K) / 3
+        self.U = numpy.zeros((K, V))
+        self.W = numpy.zeros((K, K))
+        self.V = numpy.zeros((V, K))
     def learn(self, docs, alpha=0.1):
         index = numpy.arange(len(docs))
         numpy.random.shuffle(index)
@@ -24,15 +27,16 @@ class RNNLM:
             pre_w = 0 # <s>
             for w in doc:
                 s = 1 / (numpy.exp(- numpy.dot(self.W, pre_s) - self.U[:, pre_w]) + 1)
-                pre_w = w
                 z = numpy.dot(self.V, s)
                 y = numpy.exp(z - z.max())
                 y = y / y.sum()
                 y[w] -= 1  # -e0
+                eha = numpy.dot(y, self.V) * s * (s - 1) * alpha # eh * alpha
                 self.V -= numpy.outer(y, s * alpha)
-                meh = numpy.dot(y, self.V) * alpha # -eh * alpha
-                self.U[:, w] += meh * s * (s - 1)
-                self.W -= numpy.outer(pre_s, meh)
+                self.U[:, pre_w] += eha
+                self.W += numpy.outer(pre_s, eha)
+                pre_w = w
+                pre_s = s
 
     def perplexity(self, docs):
         log_like = 0
@@ -42,11 +46,11 @@ class RNNLM:
             pre_w = 0 # <s>
             for w in doc:
                 s = 1 / (numpy.exp(- numpy.dot(self.W, s) - self.U[:, pre_w]) + 1)
-                pre_w = w
                 z = numpy.dot(self.V, s)
                 y = numpy.exp(z - z.max())
                 y = y / y.sum()
                 log_like -= numpy.log(y[w])
+                pre_w = w
             N += len(doc)
         return log_like / N
 
@@ -115,7 +119,7 @@ def main():
     voca = {"<s>":0, "</s>":1}
     vocalist = ["<s>", "</s>"]
     docs = []
-    for id in corpus.fileids():
+    for id in corpus.fileids()[:2]:
         doc = []
         for w in corpus.words(id):
             w = w.lower()
@@ -139,7 +143,7 @@ def main():
     print ">> RNNLM(K=%d)" % opt.K
     model = RNNLM(V, opt.K)
     print model.perplexity(docs)
-    intervals = [1.0, 0.5, 0.4, 0.3, 0.2]
+    intervals = [1.0, 1.0, 0.5, 0.5, 0.4, 0.3, 0.2]
     for i in xrange(opt.I):
         a = intervals[i] if i < len(intervals) else 0.1
         model.learn(docs, a)
