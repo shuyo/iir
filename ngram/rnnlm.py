@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # encode: utf-8
 
-# Recurrent Neural Network Langage Model
+# Recurrent Neural Network Language Model
 # This code is available under the MIT License.
 # (c)2014 Nakatani Shuyo / Cybozu Labs Inc.
 
-import numpy, nltk
+import numpy, nltk, codecs, re
 import optparse
 
 class RNNLM:
@@ -63,7 +63,7 @@ class RNNLM:
 
 class RNNLM_BPTT(RNNLM):
     """RNNLM with BackPropagation Through Time"""
-    def learn(self, docs, alpha=0.1, tau=10):
+    def learn(self, docs, alpha=0.1, tau=3):
         index = numpy.arange(len(docs))
         numpy.random.shuffle(index)
         for i in index:
@@ -125,10 +125,14 @@ class BIGRAM:
             N += len(doc)
         return log_like / N
 
+def CorpusWrapper(corpus):
+    for id in corpus.fileids():
+        yield corpus.words(id)
 
 def main():
     parser = optparse.OptionParser()
-    parser.add_option("-c", dest="corpus", help="corpus module name under nltk.corpus (e.g. brown, reuters)", default='nps_chat')
+    parser.add_option("-c", dest="corpus", help="corpus module name under nltk.corpus (e.g. brown, reuters)")
+    parser.add_option("-f", dest="filename", help="corpus filename name (each line is regarded as a document)")
     parser.add_option("-a", dest="alpha", type="float", help="additive smoothing parameter of bigram", default=0.001)
     parser.add_option("-k", dest="K", type="int", help="size of hidden layer", default=10)
     parser.add_option("-i", dest="I", type="int", help="learning interval", default=10)
@@ -138,49 +142,60 @@ def main():
 
     numpy.random.seed(opt.seed)
 
-    m = __import__('nltk.corpus', globals(), locals(), [opt.corpus], -1)
-    corpus = getattr(m, opt.corpus)
-    ids = corpus.fileids()
-    D = len(ids)
-    print "found corpus : %s (D=%d)" % (opt.corpus, D)
+    if opt.corpus:
+        m = __import__('nltk.corpus', globals(), locals(), [opt.corpus], -1)
+        corpus = CorpusWrapper(getattr(m, opt.corpus))
+    elif opt.filename:
+        corpus = []
+        with codecs.open(opt.filename, "rb", "utf-8") as f:
+            for s in f:
+                s = re.sub(r'(["\.,!\?:;])', r' \1 ', s).strip()
+                d = re.split(r'\s+', s)
+                if len(d) > 0: corpus.append(d)
+    else:
+        raise "need -f or -c"
 
     voca = {"<s>":0, "</s>":1}
     vocalist = ["<s>", "</s>"]
     docs = []
-    for id in corpus.fileids()[:2]:
+    N = 0
+    for words in corpus:
         doc = []
-        for w in corpus.words(id):
+        for w in words:
             w = w.lower()
             if w not in voca:
                 voca[w] = len(vocalist)
                 vocalist.append(w)
             doc.append(voca[w])
         if len(doc) > 0:
-            doc.append(1)
+            N += len(doc)
+            doc.append(1) # </s>
             docs.append(doc)
-    V = len(vocalist)
-    print "vocabulary : %d / %d" % (V, len(corpus.words()))
 
     D = len(docs)
+    V = len(vocalist)
+    print "corpus : %s (D=%d)" % (opt.corpus or opt.filename, D)
+    print "vocabulary : %d / %d" % (V, N)
+
+    print ">> RNNLM(K=%d)" % opt.K
+    model = RNNLM_BPTT(V, opt.K)
+    a = 1.0
+    for i in xrange(opt.I):
+        print i, model.perplexity(docs)
+        model.learn(docs, a)
+        a = a * 0.95 + 0.01
+    print opt.I, model.perplexity(docs)
+
+    if opt.output:
+        import cPickle
+        with open(opt.output, 'wb') as f:
+            cPickle.dump([model, voca, vocalist], f)
 
     print ">> BIGRAM(alpha=%f)" % opt.alpha
     model = BIGRAM(V, opt.alpha)
     model.learn(docs)
     print model.perplexity(docs)
 
-    print ">> RNNLM(K=%d)" % opt.K
-    model = RNNLM(V, opt.K)
-    print model.perplexity(docs)
-    intervals = [1.0, 1.0, 0.5, 0.5, 0.4, 0.3, 0.2]
-    for i in xrange(opt.I):
-        a = intervals[i] if i < len(intervals) else 0.1
-        model.learn(docs, a)
-        print model.perplexity(docs)
-
-    if opt.output:
-        import cPickle
-        with open(opt.output, 'wb') as f:
-            cPickle.dump([model, voca, vocalist], f)
 
 """
     testids = set(random.sample(ids, int(D * opt.testrate)))
