@@ -12,12 +12,10 @@ class RNNLM:
     def __init__(self, V, K=10):
         self.K = K
         self.v = V
-        #self.U = numpy.random.randn(K, V) / 3
-        #self.W = numpy.random.randn(K, K) / 3
-        #self.V = numpy.random.randn(V, K) / 3
-        self.U = numpy.zeros((K, V))
-        self.W = numpy.zeros((K, K))
-        self.V = numpy.zeros((V, K))
+        self.U = numpy.random.randn(K, V) / 3
+        self.W = numpy.random.randn(K, K) / 3
+        self.V = numpy.random.randn(V, K) / 3
+
     def learn(self, docs, alpha=0.1):
         index = numpy.arange(len(docs))
         numpy.random.shuffle(index)
@@ -62,6 +60,36 @@ class RNNLM:
             z = numpy.dot(self.V, self.s)
             y = numpy.exp(z - z.max())
             return y / y.sum()
+
+class RNNLM_BPTT(RNNLM):
+    """RNNLM with BackPropagation Through Time"""
+    def learn(self, docs, alpha=0.1, tau=10):
+        index = numpy.arange(len(docs))
+        numpy.random.shuffle(index)
+        for i in index:
+            doc = docs[i]
+            pre_s = [numpy.zeros(self.K)]
+            pre_w = [0] # <s>
+            for w in doc:
+                s = 1 / (numpy.exp(- numpy.dot(self.W, pre_s[-1]) - self.U[:, pre_w[-1]]) + 1)
+                z = numpy.dot(self.V, s)
+                y = numpy.exp(z - z.max())
+                y = y / y.sum()
+
+                # calculate errors
+                y[w] -= 1  # -e0
+                eh = [numpy.dot(y, self.V) * s * (s - 1)] # eh[t]
+                for t in xrange(min(tau, len(pre_s)-1)):
+                    st = pre_s[-1-t]
+                    eh.append(numpy.dot(eh[-1], self.W) * st * (1 - st))
+
+                # update parameters
+                pre_w.append(w)
+                pre_s.append(s)
+                self.V -= numpy.outer(y, s * alpha)
+                for t in xrange(len(eh)):
+                    self.U[:, pre_w[-1-t]] += eh[t] * alpha
+                    self.W += numpy.outer(pre_s[-2-t], eh[t]) * alpha
 
 class BIGRAM:
     def __init__(self, V, alpha=0.01):
