@@ -77,11 +77,11 @@ class LDA:
 
 def lda_learning(lda, iteration, voca):
     pre_perp = lda.perplexity()
-    print "initial perplexity=%f" % pre_perp
+    print ("initial perplexity=%f" % pre_perp)
     for i in range(iteration):
         lda.inference()
         perp = lda.perplexity()
-        print "-%d p=%f" % (i + 1, perp)
+        print ("-%d p=%f" % (i + 1, perp))
         if pre_perp:
             if pre_perp < perp:
                 output_word_topic_dist(lda, voca)
@@ -92,7 +92,7 @@ def lda_learning(lda, iteration, voca):
 
 def output_word_topic_dist(lda, voca):
     zcount = numpy.zeros(lda.K, dtype=int)
-    wordcount = [dict() for k in xrange(lda.K)]
+    wordcount = [dict() for k in range(lda.K)]
     for xlist, zlist in zip(lda.docs, lda.z_m_n):
         for x, z in zip(xlist, zlist):
             zcount[z] += 1
@@ -102,10 +102,10 @@ def output_word_topic_dist(lda, voca):
                 wordcount[z][x] = 1
 
     phi = lda.worddist()
-    for k in xrange(lda.K):
-        print "\n-- topic: %d (%d words)" % (k, zcount[k])
+    for k in range(lda.K):
+        print ("\n-- topic: %d (%d words)" % (k, zcount[k]))
         for w in numpy.argsort(-phi[k])[:20]:
-            print "%s: %f (%d)" % (voca[w], phi[k,w], wordcount[k].get(w,0))
+            print ("%s: %f (%d)" % (voca[w], phi[k,w], wordcount[k].get(w,0)))
 
 def main():
     import optparse
@@ -137,7 +137,7 @@ def main():
     if options.df > 0: docs = voca.cut_low_freq(docs, options.df)
 
     lda = LDA(options.K, options.alpha, options.beta, docs, voca.size(), options.smartinit)
-    print "corpus=%d, words=%d, K=%d, a=%f, b=%f" % (len(corpus), len(voca.vocas), options.K, options.alpha, options.beta)
+    print ("corpus=%d, words=%d, K=%d, a=%f, b=%f" % (len(corpus), len(voca.vocas), options.K, options.alpha, options.beta))
 
     #import cProfile
     #cProfile.runctx('lda_learning(lda, options.iteration, voca)', globals(), locals(), 'lda.profile')
