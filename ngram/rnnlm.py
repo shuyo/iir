@@ -16,7 +16,11 @@ class RNNLM:
         self.W = numpy.random.randn(K, K) / 3
         self.V = numpy.random.randn(V, K) / 3
 
-    def learn(self, docs, alpha=0.1):
+    def learn(self, docs, alpha=0.1, beta=0):
+        beta = 1 - beta
+        log_like = 0
+        N = 0
+
         index = numpy.arange(len(docs))
         numpy.random.shuffle(index)
         for i in index:
@@ -28,13 +32,20 @@ class RNNLM:
                 z = numpy.dot(self.V, s)
                 y = numpy.exp(z - z.max())
                 y = y / y.sum()
+                log_like -= numpy.log(y[w])
                 y[w] -= 1  # -e0
                 eha = numpy.dot(y, self.V) * s * (s - 1) * alpha # eh * alpha
                 self.V -= numpy.outer(y, s * alpha)
                 self.U[:, pre_w] += eha
                 self.W += numpy.outer(pre_s, eha)
+                if beta < 1:
+                    self.V *= beta
+                    self.W *= beta
+                    self.U[:, pre_w] *= beta
                 pre_w = w
                 pre_s = s
+            N += len(doc)
+        return log_like / N
 
     def perplexity(self, docs):
         log_like = 0
@@ -52,14 +63,14 @@ class RNNLM:
             N += len(doc)
         return log_like / N
 
+    def clear(self):
+        self.s = numpy.zeros(self.K)
+
     def dist(self, w):
-        if w==0:
-            self.s = numpy.zeros(self.K)
-        else:
-            self.s = 1 / (numpy.exp(- numpy.dot(self.W, self.s) - self.U[:, w]) + 1)
-            z = numpy.dot(self.V, self.s)
-            y = numpy.exp(z - z.max())
-            return y / y.sum()
+        self.s = 1 / (numpy.exp(- numpy.dot(self.W, self.s) - self.U[:, w]) + 1)
+        z = numpy.dot(self.V, self.s)
+        y = numpy.exp(z - z.max())
+        return y / y.sum()
 
 class RNNLM_BPTT(RNNLM):
     """RNNLM with BackPropagation Through Time"""
@@ -132,8 +143,8 @@ def CorpusWrapper(corpus):
 def main():
     parser = optparse.OptionParser()
     parser.add_option("-c", dest="corpus", help="corpus module name under nltk.corpus (e.g. brown, reuters)")
-    parser.add_option("-f", dest="filename", help="corpus filename name (each line is regarded as a document)")
     parser.add_option("-a", dest="alpha", type="float", help="additive smoothing parameter of bigram", default=0.001)
+    parser.add_option("-b", dest="beta", type="float", help="L2-regularity weight", default=0)
     parser.add_option("-k", dest="K", type="int", help="size of hidden layer", default=10)
     parser.add_option("-i", dest="I", type="int", help="learning interval", default=10)
     parser.add_option("-o", dest="output", help="output filename of rnnlm model")
@@ -145,13 +156,26 @@ def main():
     if opt.corpus:
         m = __import__('nltk.corpus', globals(), locals(), [opt.corpus], -1)
         corpus = CorpusWrapper(getattr(m, opt.corpus))
-    elif opt.filename:
+    elif len(args) > 0:
         corpus = []
-        with codecs.open(opt.filename, "rb", "utf-8") as f:
-            for s in f:
-                s = re.sub(r'(["\.,!\?:;])', r' \1 ', s).strip()
-                d = re.split(r'\s+', s)
-                if len(d) > 0: corpus.append(d)
+        for filename in args:
+            with codecs.open(filename, "rb", "utf-8") as f:
+                for s in f:
+                    s = re.sub(r'([!-&\(-/:-@\[-`\{-~]+)', r' \1 ', s).strip()
+                    d = re.split(r'\s+', s)
+                    doc = []
+                    for w in d:
+                        if len(w) == 0: continue
+                        if w[0] == "'":
+                            doc.append("'")
+                            w = w[1:]
+                        if len(w) > 1 and w[-1] == "'":
+                            doc.append(w[:-1])
+                            doc.append("'")
+                        elif len(w) > 0:
+                            doc.append(w)
+                    if len(doc) > 0:
+                        corpus.append(doc)
     else:
         raise "need -f or -c"
 
@@ -174,15 +198,17 @@ def main():
 
     D = len(docs)
     V = len(vocalist)
-    print "corpus : %s (D=%d)" % (opt.corpus or opt.filename, D)
+    print "corpus : %d" % D
     print "vocabulary : %d / %d" % (V, N)
 
-    print ">> RNNLM(K=%d)" % opt.K
-    model = RNNLM_BPTT(V, opt.K)
+    print ">> RNNLM(K=%d, b=%f)" % (opt.K, opt.beta)
+    model = RNNLM(V, K=opt.K)
     a = 1.0
+    b = 0
     for i in xrange(opt.I):
-        print i, model.perplexity(docs)
-        model.learn(docs, a)
+        if i > opt.I / 2: b = opt.beta
+        perpl = model.learn(docs, a, b)
+        print i, perpl, "a=%.3f" % a, b
         a = a * 0.95 + 0.01
     print opt.I, model.perplexity(docs)
 
