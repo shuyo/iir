@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 # MNIST generator based on Conditional Generative Adversarial Networks with Tensorflow
+# (M. Mirza and S. Osindero. Conditional generative adversarial nets. CoRR, abs/1411.1784, 2014.)
+
 # This code is available under the MIT License.
 # (c)2016 Nakatani Shuyo / Cybozu Labs Inc.
 

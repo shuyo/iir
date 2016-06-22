@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 # MNIST generator based on Generative Adversarial Networks with Tensorflow
+# (I. Goodfellow, J. Pouget-Abadie, M. Mirza, B. Xu, D. Warde-Farley, S. Ozair, A. Courville, and Y. Bengio. Generative adversarial nets. In NIPS, pages 2672–2680. 2014.)
+
 # This code is available under the MIT License.
 # (c)2016 Nakatani Shuyo / Cybozu Labs Inc.
 
