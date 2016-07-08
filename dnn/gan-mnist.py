@@ -30,15 +30,17 @@ X = tf.placeholder(tf.float32, shape=(None, num_features))
 Z = tf.placeholder(tf.float32, shape=(None, noise_dim))
 keep_prob = tf.placeholder(tf.float32)
 
-GW1 = tf.Variable(tf.random_normal([noise_dim, Ghidden], stddev=0.1), name="GW1")
-Gb1 = tf.Variable(tf.zeros(Ghidden), name="Gb1")
-GW2 = tf.Variable(tf.random_normal([Ghidden, num_features], stddev=0.1), name="GW2")
-Gb2 = tf.Variable(tf.zeros(num_features), name="Gb2")
+with tf.variable_scope("G"):
+    GW1 = tf.Variable(tf.random_normal([noise_dim, Ghidden], stddev=0.1))
+    Gb1 = tf.Variable(tf.zeros(Ghidden))
+    GW2 = tf.Variable(tf.random_normal([Ghidden, num_features], stddev=0.1))
+    Gb2 = tf.Variable(tf.zeros(num_features))
 
-DW1 = tf.Variable(tf.random_normal([num_features, K * Dhidden], stddev=0.01), name="DW1")
-Db1 = tf.Variable(tf.zeros(K * Dhidden), name="Db1")
-DW2 = tf.Variable(tf.random_normal([Dhidden, 1], stddev=0.01), name="DW2")
-Db2 = tf.Variable(tf.zeros(1), name="Db2")
+with tf.variable_scope("D"):
+    DW1 = tf.Variable(tf.random_normal([num_features, K * Dhidden], stddev=0.01))
+    Db1 = tf.Variable(tf.zeros(K * Dhidden))
+    DW2 = tf.Variable(tf.random_normal([Dhidden, 1], stddev=0.01))
+    Db2 = tf.Variable(tf.zeros(1))
 
 def discriminator(xx):
     u = tf.reshape(tf.matmul(xx, DW1) + Db1, [-1, K, Dhidden])
