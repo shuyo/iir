@@ -8,30 +8,46 @@
 # This code is available under the MIT License.
 # (c)2016 Nakatani Shuyo / Cybozu Labs Inc.
 
-import numpy, math, time
+import argparse, configparser, re
+parser = argparse.ArgumentParser()
+parser.add_argument('-c', '--config', help='config file', default="cdcgan-svhn.ini")
+parser.add_argument('-s', '--section', help='section of config', default="DEFAULT")
+parser.add_argument('--init', action="store_true", help='initialize parameters if model exists')
+parser.add_argument('-t', type=int, help='generate test sample')
+#parser.add_argument('-w', help='vectorize and pickle dump with word2vec')
+args = parser.parse_args()
+config = configparser.ConfigParser()
+config.read(args.config)
+param = config[args.section]
+
+def ints(s):
+    return [int(x.group(0)) for x in re.finditer(r'\d+', s)]
+
+import numpy, math, time, os
 import scipy.io
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
 # model parameter
-noise_dim = 100 # input noise size of Generator
-Dhidden = [64, 128, 256]    # hidden units of Discriminator's network
-Ghidden = [512, 256, 128]  # hidden units of Generator's network
+noise_dim = int(param["noise dim"]) # input noise size of Generator
+Dhidden = ints(param["discriminator hidden units"])    # hidden units of Discriminator's network
+Ghidden = ints(param["generator hidden units"])  # hidden units of Generator's network
 
-mini_batch_size = 128
+mini_batch_size = int(param["mini batch size"])
+
 samples=(8,10)  # samples drawing size
 nsamples = samples[0] * samples[1]
 assert nsamples <= mini_batch_size
-epoch = 200
+epoch = int(param["epoch"])
 
-# download train_32x32.mat in advance from http://ufldl.stanford.edu/housenumbers/
-svhn = scipy.io.loadmat("data/train_32x32.mat")
+svhn = scipy.io.loadmat(param["SVHN path"])
+num_labels = int(param["number of labels"])
+
 train_data = svhn["X"]
 train_labels = svhn["y"].flatten()
-#train_data = train_data[:, :, :, :256] # small dataset
-#train_labels = train_labels[:256]
-num_labels = 10
-train_labels[train_labels==10] = 0
+train_data = train_data[:, :, :, :1024] # small dataset
+train_labels = train_labels[:1024]
+train_labels[train_labels>=num_labels] = 0
 
 fig_width, fig_height, n_channels, N = train_data.shape
 train_data = train_data.reshape(fig_width * fig_height * n_channels, N)
@@ -43,6 +59,7 @@ X = tf.placeholder(tf.float32, shape=(None, fig_width, fig_height, n_channels))
 Y = tf.placeholder(tf.float32, shape=(None, num_labels))
 Z = tf.placeholder(tf.float32, shape=(None, noise_dim))
 keep_prob = tf.placeholder(tf.float32)
+alpha = tf.placeholder(tf.float32)
 
 with tf.variable_scope("G"):
     GW0 = tf.Variable(tf.random_normal([noise_dim, Ghidden[0]*4*4], stddev=0.01))
@@ -96,15 +113,22 @@ vars = tf.trainable_variables()
 Dvars = [v for v in vars if v.name.startswith("D")]
 Gvars = [v for v in vars if v.name.startswith("G")]
 
-Doptimizer = tf.train.AdamOptimizer(learning_rate=2e-4).minimize(Dloss, var_list=Dvars)
-Goptimizer = tf.train.AdamOptimizer(learning_rate=2e-4).minimize(Gloss, var_list=Gvars)
+Doptimizer = tf.train.AdamOptimizer(learning_rate=alpha).minimize(Dloss, var_list=Dvars)
+Goptimizer = tf.train.AdamOptimizer(learning_rate=alpha).minimize(Gloss, var_list=Gvars)
 
+work_dir = param["working directory"]
+if not os.path.exists(work_dir): os.makedirs(work_dir)
+model_path = os.path.join(work_dir, param["model filename"])
+
+saver = tf.train.Saver()
 sess = tf.Session()
-sess.run(tf.initialize_all_variables())
+if args.init or not os.path.exists(model_path):
+    sess.run(tf.initialize_all_variables())
+else:
+    saver.restore(sess, model_path)
 
 def save_figure(path, z, y):
     Gz = sess.run(G, feed_dict={Z: z, Y: y})
-    #plt.ion()
     fig = plt.gcf()
     fig.subplots_adjust(left=0,bottom=0,right=1,top=1)
     for i in range(nsamples):
@@ -112,38 +136,46 @@ def save_figure(path, z, y):
         ax.axis("off")
         ax.imshow(Gz[i,:,:,:])
     plt.savefig(path)
-    plt.draw()
-    plt.pause(0.01)
+    return plt
 
-t0 = time.time()
-drawz = numpy.random.uniform(-1, 1, size=(mini_batch_size//num_labels+1, noise_dim)).repeat(num_labels, axis=0)[:mini_batch_size]
-drawy = numpy.tile(numpy.eye(num_labels),(mini_batch_size//num_labels+1,1))[:mini_batch_size]
+if args.t:
+    ub = mini_batch_size // num_labels + 1
+    y = numpy.tile(numpy.eye(num_labels),(ub,1))[:mini_batch_size]
+    for i in range(args.t):
+        z = numpy.random.uniform(-1, 1, size=(ub, noise_dim)).repeat(num_labels, axis=0)[:mini_batch_size]
+        save_figure(os.path.join(work_dir, "cdcgan-svhn-test-%03d.png" % i), z, y)
 
-for e in range(epoch):
-    index = numpy.random.permutation(N)
-    dloss = gloss = 0.0
-    for i in range(period):
-        idx = index[i*mini_batch_size:(i+1)*mini_batch_size]
-        x = train_data[idx, :]
-        y = numpy.zeros((mini_batch_size, num_labels), dtype=numpy.float32)
-        y[numpy.arange(mini_batch_size), train_labels[idx]] = 1
-        z = numpy.random.uniform(-1, 1, size=(mini_batch_size, noise_dim))
-        loss, _ = sess.run([Dloss, Doptimizer], feed_dict={X:x, Y:y, Z:z, keep_prob:0.5})
-        dloss += loss
+else:
+    t0 = time.time()
+    drawz = numpy.random.uniform(-1, 1, size=(mini_batch_size//num_labels+1, noise_dim)).repeat(num_labels, axis=0)[:mini_batch_size]
+    drawy = numpy.tile(numpy.eye(num_labels),(mini_batch_size//num_labels+1,1))[:mini_batch_size]
 
-        y = numpy.zeros((mini_batch_size, num_labels), dtype=numpy.float32)
-        y[numpy.arange(mini_batch_size), numpy.random.randint(0,10,mini_batch_size)] = 1
-        z = numpy.random.uniform(-1, 1, size=(mini_batch_size, noise_dim))
-        loss, _ = sess.run([Gloss, Goptimizer], feed_dict={Y:y, Z:z, keep_prob:1.0})
-        gloss += loss
+    for e in range(epoch):
+        index = numpy.random.permutation(N)
+        dloss = gloss = 0.0
+        for i in range(period):
+            idx = index[i*mini_batch_size:(i+1)*mini_batch_size]
+            x = train_data[idx, :]
+            y = numpy.zeros((mini_batch_size, num_labels), dtype=numpy.float32)
+            y[numpy.arange(mini_batch_size), train_labels[idx]] = 1
+            z = numpy.random.uniform(-1, 1, size=(mini_batch_size, noise_dim))
+            loss, _ = sess.run([Dloss, Doptimizer], feed_dict={X:x, Y:y, Z:z, keep_prob:0.5, alpha:2e-4})
+            dloss += loss
 
-        if math.isnan(dloss) or math.isnan(gloss):
-            sess.run(tf.initialize_all_variables()) # initialize & retry if NaN
-            print("...initialize parameters for nan...")
-            dloss = gloss = 0.0
+            y = numpy.zeros((mini_batch_size, num_labels), dtype=numpy.float32)
+            y[numpy.arange(mini_batch_size), numpy.random.randint(0,10,mini_batch_size)] = 1
+            z = numpy.random.uniform(-1, 1, size=(mini_batch_size, noise_dim))
+            loss, _ = sess.run([Gloss, Goptimizer], feed_dict={Y:y, Z:z, keep_prob:1.0, alpha:2e-4})
+            gloss += loss
 
-    print("%d: dloss=%.5f, gloss=%.5f, time=%.1f" % (e+1, dloss / period, gloss / period, time.time()-t0))
-    save_figure("png/cdcgan-svhn-%03d.png" % (e+1), drawz, drawy)
+            if math.isnan(dloss) or math.isnan(gloss):
+                sess.run(tf.initialize_all_variables()) # initialize & retry if NaN
+                print("...initialize parameters for nan...")
+                dloss = gloss = 0.0
 
-saver = tf.train.Saver()
-saver.save(sess, "cdcgan-svhn.model")
+        print("%d: dloss=%.5f, gloss=%.5f, time=%.1f" % (e+1, dloss / period, gloss / period, time.time()-t0))
+        plt = save_figure(os.path.join(work_dir, "cdcgan-svhn-%03d.png" % (e+1)), drawz, drawy)
+        plt.draw()
+        plt.pause(0.01)
+
+    saver.save(sess, model_path)
