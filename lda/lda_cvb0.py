@@ -27,7 +27,10 @@ class LDA_CVB0:
             for i, w in enumerate(doc):
                 if smartinit:
                     p_k = self.n_wk[w] * self.n_jk[j] / self.n_k
-                    gamma_k = numpy.random.mtrand.dirichlet(p_k / p_k.sum() * alpha)
+                    try:
+                        gamma_k = numpy.random.mtrand.dirichlet(p_k / p_k.sum() * alpha)
+                    except ZeroDivisionError:
+                        gamma_k = [float("nan")]
                 else:
                     gamma_k = [float("nan")]
                 if not numpy.isfinite(gamma_k[0]): # maybe NaN or Inf
@@ -54,12 +57,12 @@ class LDA_CVB0:
             gamma_ik = self.gamma_jik[j]
             n_jk = self.n_jk[j]
             new_n_jk_j = new_n_jk[j]
-            for i, gamma_k in enumerate(gamma_ik):
-                w, freq = doc[i]
+            for d, gamma_k in zip(doc, gamma_ik):
+                w, freq = d
                 new_gamma_k = (self.n_wk[w] - gamma_k) * (n_jk - gamma_k) / (n_k - gamma_k)
                 new_gamma_k /= new_gamma_k.sum()
 
-                gamma_ik[i] = new_gamma_k
+                gamma_k[:] = new_gamma_k
                 gamma_freq = new_gamma_k * freq
                 new_n_wk[w] += gamma_freq
                 new_n_jk_j += gamma_freq
@@ -87,11 +90,11 @@ class LDA_CVB0:
 
 def lda_learning(lda, iteration, voca):
     pre_perp = lda.perplexity()
-    print "initial perplexity=%f" % pre_perp
+    print("initial perplexity=%f" % pre_perp)
     for i in range(iteration):
         lda.inference()
         perp = lda.perplexity()
-        print "-%d p=%f" % (i + 1, perp)
+        print("-%d p=%f" % (i + 1, perp))
         if pre_perp:
             if pre_perp < perp:
                 output_word_topic_dist(lda, voca)
@@ -103,9 +106,9 @@ def lda_learning(lda, iteration, voca):
 def output_word_topic_dist(lda, voca):
     phi = lda.worddist()
     for k in range(lda.K):
-        print "\n-- topic: %d" % k
+        print("\n-- topic: %d" % k)
         for w in numpy.argsort(-phi[k])[:20]:
-            print "%s: %f" % (voca[w], phi[k,w])
+            print("%s: %f" % (voca[w], phi[k,w]))
 
 def main():
     import optparse
@@ -137,7 +140,7 @@ def main():
     if options.df > 0: docs = voca.cut_low_freq(docs, options.df)
 
     lda = LDA_CVB0(options.K, options.alpha, options.beta, docs, voca.size(), options.smartinit)
-    print "corpus=%d, words=%d, voca=%d, K=%d, a=%f, b=%f" % (len(corpus), lda.N, len(voca.vocas), options.K, options.alpha, options.beta)
+    print("corpus=%d, words=%d, voca=%d, K=%d, a=%f, b=%f" % (len(corpus), lda.N, len(voca.vocas), options.K, options.alpha, options.beta))
 
     #import cProfile
     #cProfile.runctx('lda_learning(lda, options.iteration, voca)', globals(), locals(), 'lda.profile')
