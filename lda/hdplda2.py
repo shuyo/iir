@@ -29,16 +29,16 @@ class HDPLDA:
 
         # t : table index for document j
         #     t=0 means to draw a new table
-        self.using_t = [[0] for j in xrange(self.M)]
+        self.using_t = [[0] for j in range(self.M)]
 
         # k : dish(topic) index
         #     k=0 means to draw a new dish
         self.using_k = [0]
 
         self.x_ji = docs # vocabulary for each document and term
-        self.k_jt = [numpy.zeros(1 ,dtype=int) for j in xrange(self.M)]   # topics of document and table
-        self.n_jt = [numpy.zeros(1 ,dtype=int) for j in xrange(self.M)]   # number of terms for each table of document
-        self.n_jtv = [[None] for j in xrange(self.M)]
+        self.k_jt = [numpy.zeros(1 ,dtype=int) for j in range(self.M)]   # topics of document and table
+        self.n_jt = [numpy.zeros(1 ,dtype=int) for j in range(self.M)]   # number of terms for each table of document
+        self.n_jtv = [[None] for j in range(self.M)]
 
         self.m = 0
         self.m_k = numpy.ones(1 ,dtype=int)  # number of tables for each topic
@@ -50,16 +50,16 @@ class HDPLDA:
 
     def inference(self):
         for j, x_i in enumerate(self.x_ji):
-            for i in xrange(len(x_i)):
+            for i in range(len(x_i)):
                 self.sampling_t(j, i)
-        for j in xrange(self.M):
+        for j in range(self.M):
             for t in self.using_t[j]:
                 if t != 0: self.sampling_k(j, t)
 
     def worddist(self):
         """return topic-word distribution without new topic"""
         return [DefaultDict(self.beta / self.n_k[k]).update(
-            (v, n_kv / self.n_k[k]) for v, n_kv in self.n_kv[k].iteritems())
+            (v, n_kv / self.n_k[k]) for v, n_kv in self.n_kv[k].items())
                 for k in self.using_k if k != 0]
 
     def docdist(self):
@@ -97,19 +97,18 @@ class HDPLDA:
 
 
     def dump(self, disp_x=False):
-        if disp_x: print "x_ji:", self.x_ji
-        print "using_t:", self.using_t
-        print "t_ji:", self.t_ji
-        print "using_k:", self.using_k
-        print "k_jt:", self.k_jt
-        print "----"
-        print "n_jt:", self.n_jt
-        print "n_jtv:", self.n_jtv
-        print "n_k:", self.n_k
-        print "n_kv:", self.n_kv
-        print "m:", self.m
-        print "m_k:", self.m_k
-        print
+        if disp_x: print("x_ji:", self.x_ji)
+        print("using_t:", self.using_t)
+        print("t_ji:", self.t_ji)
+        print("using_k:", self.using_k)
+        print("k_jt:", self.k_jt)
+        print("----")
+        print("n_jt:", self.n_jt)
+        print("n_jtv:", self.n_jtv)
+        print("n_k:", self.n_k)
+        print("n_kv:", self.n_kv)
+        print("m:", self.m)
+        print("m_k:", self.m_k)
 
 
     def sampling_t(self, j, i):
@@ -169,7 +168,7 @@ class HDPLDA:
         p_t = self.n_jt[j][using_t] * f_k[self.k_jt[j][using_t]]
         p_x_ji = numpy.inner(self.m_k, f_k) + self.gamma / self.V
         p_t[0] = p_x_ji * self.alpha / (self.gamma + self.m)
-        #print "un-normalized p_t = ", p_t
+        #print("un-normalized p_t = ", p_t)
         return p_t / p_t.sum()
 
     def seat_at_table(self, j, i, t_new):
@@ -242,7 +241,7 @@ class HDPLDA:
     def calc_dish_posterior_t(self, j, t):
         "calculate dish(topic) posterior when one table is removed"
         k_old = self.k_jt[j][t]     # it may be zero (means a removed dish)
-        #print "V=", self.V, "beta=", self.beta, "n_k=", self.n_k
+        #print("V=", self.V, "beta=", self.beta, "n_k=", self.n_k)
         Vbeta = self.V * self.beta
         n_k = self.n_k.copy()
         n_jt = self.n_jt[j][t]
@@ -250,22 +249,22 @@ class HDPLDA:
         n_k = n_k[self.using_k]
         log_p_k = numpy.log(self.m_k[self.using_k]) + gammaln(n_k) - gammaln(n_k + n_jt)
         log_p_k_new = numpy.log(self.gamma) + gammaln(Vbeta) - gammaln(Vbeta + n_jt)
-        #print "log_p_k_new+=gammaln(",Vbeta,") - gammaln(",Vbeta + n_jt,")"
+        #print("log_p_k_new+=gammaln(",Vbeta,") - gammaln(",Vbeta + n_jt,")")
 
         gammaln_beta = gammaln(self.beta)
-        for w, n_jtw in self.n_jtv[j][t].iteritems():
+        for w, n_jtw in self.n_jtv[j][t].items():
             assert n_jtw >= 0
             if n_jtw == 0: continue
             n_kw = numpy.array([n.get(w, self.beta) for n in self.n_kv])
             n_kw[k_old] -= n_jtw
             n_kw = n_kw[self.using_k]
             n_kw[0] = 1 # dummy for logarithm's warning
-            if numpy.any(n_kw <= 0): print n_kw # for debug
+            if numpy.any(n_kw <= 0): print(n_kw) # for debug
             log_p_k += gammaln(n_kw + n_jtw) - gammaln(n_kw)
             log_p_k_new += gammaln(self.beta + n_jtw) - gammaln_beta
-            #print "log_p_k_new+=gammaln(",self.beta + n_jtw,") - gammaln(",self.beta,"), w=",w
+            #print("log_p_k_new+=gammaln(",self.beta + n_jtw,") - gammaln(",self.beta,"), w=",w)
         log_p_k[0] = log_p_k_new
-        #print "un-normalized p_k = ", numpy.exp(log_p_k)
+        #print("un-normalized p_k = ", numpy.exp(log_p_k))
         p_k = numpy.exp(log_p_k - log_p_k.max())
         return p_k / p_k.sum()
 
@@ -280,7 +279,7 @@ class HDPLDA:
             n_jt = self.n_jt[j][t]
             if k_old != 0: self.n_k[k_old] -= n_jt
             self.n_k[k_new] += n_jt
-            for v, n in self.n_jtv[j][t].iteritems():
+            for v, n in self.n_jtv[j][t].items():
                 if k_old != 0: self.n_kv[k_old][v] -= n
                 self.n_kv[k_new][v] += n
 
@@ -309,7 +308,7 @@ class HDPLDA:
 def hdplda_learning(hdplda, iteration):
     for i in range(iteration):
         hdplda.inference()
-        print "-%d K=%d p=%f" % (i + 1, len(hdplda.using_k)-1, hdplda.perplexity())
+        print("-%d K=%d p=%f" % (i + 1, len(hdplda.using_k)-1, hdplda.perplexity()))
     return hdplda
 
 def output_summary(hdplda, voca, fp=None):
@@ -319,7 +318,7 @@ def output_summary(hdplda, voca, fp=None):
     K = len(hdplda.using_k) - 1
     kmap = dict((k,i-1) for i, k in enumerate(hdplda.using_k))
     dishcount = numpy.zeros(K, dtype=int)
-    wordcount = [DefaultDict(0) for k in xrange(K)]
+    wordcount = [DefaultDict(0) for k in range(K)]
     for j, x_ji in enumerate(hdplda.x_ji):
         for v, t in zip(x_ji, hdplda.t_ji[j]):
             k = kmap[hdplda.k_jt[j][t]]
@@ -371,7 +370,7 @@ def main():
     if options.df > 0: docs = voca.cut_low_freq(docs, options.df)
 
     hdplda = HDPLDA(options.alpha, options.gamma, options.beta, docs, voca.size())
-    print "corpus=%d words=%d alpha=%.3f gamma=%.3f beta=%.3f stopwords=%d" % (len(corpus), len(voca.vocas), options.alpha, options.gamma, options.beta, options.stopwords)
+    print("corpus=%d words=%d alpha=%.3f gamma=%.3f beta=%.3f stopwords=%d" % (len(corpus), len(voca.vocas), options.alpha, options.gamma, options.beta, options.stopwords))
     #hdplda.dump()
 
     #import cProfile
