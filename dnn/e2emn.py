@@ -1,19 +1,31 @@
 #!/usr/bin/env python
 
-import re
+import re, time
 import numpy
 import chainer
 import chainer.functions as F
 import chainer.links as L
 
-re_q = re.compile(r'\?\s(.+)\s(\d+)$')
-class Corpus(object):
-    def __init__(self, *files):
-        self._batchsize = 25
-        self.lines = []
+class Vocab(object):
+    def __init__(self):
         self.vocab = []
         self.ids = dict()
-        toid = lambda x: numpy.array([self[y] for y in x.split()])
+    def __getitem__(self, w):
+        if w not in self.ids:
+            self.ids[w] = len(self.vocab)
+            self.vocab.append(w)
+        return self.ids[w]
+    def __len__(self):
+        return len(self.vocab)
+
+re_q = re.compile(r'\?\s(.+)\s(\d+)$')
+class CorpusLoader(object):
+    def __init__(self):
+        self.vocab = Vocab()
+        self.vocab_a = Vocab()
+    def load(self, *files):
+        lines = []
+        toid = lambda x: numpy.array([self.vocab[y] for y in x.split()])
         for path in files:
             knowledge = []
             with open(path) as f:
@@ -25,17 +37,17 @@ class Corpus(object):
 
                     if m:
                         a = m.group(1)
-                        #a_num = int(m.group(2))
-                        self.lines.append((knowledge, toid(s), self[a.strip()])) # (x_nij, q_nj, a_n)
+                        #strict_supervised = [int(x) for x in m.group(2).split()]
+                        lines.append((knowledge, toid(s), self.vocab_a[a.strip()])) # (x_nij, q_nj, a_n)
                         knowledge = []
                     else:
                         knowledge.append(toid(s))
+        return Corpus(lines)
 
-    def __getitem__(self, w):
-        if w not in self.ids:
-            self.ids[w] = len(self.vocab)
-            self.vocab.append(w)
-        return self.ids[w]
+class Corpus(object):
+    def __init__(self, lines):
+        self._batchsize = 25
+        self.lines = lines
 
     @property
     def batchsize(self): return self._batchsize
@@ -53,15 +65,16 @@ class Corpus(object):
     def __len__(self):
         return len(self.lines)
 
-# End-to-End Memory Network
+# End-to-End Memory Network Model
+# simple implementation (suppose that each knowledge has the same number of sentences in a minibatch)
 class E2EMN(chainer.Chain):
-    def __init__(self, vocab, D):
+    def __init__(self, vocab_s, vocab_a, D):
         super(E2EMN, self).__init__()
         with self.init_scope():
-            self.embedid_a = L.EmbedID(vocab, D)
-            self.embedid_b = L.EmbedID(vocab, D)
-            self.embedid_c = L.EmbedID(vocab, D)
-            self.W = L.Linear(D, vocab)
+            self.embedid_a = L.EmbedID(vocab_s, D)
+            self.embedid_b = L.EmbedID(vocab_s, D)
+            self.embedid_c = L.EmbedID(vocab_s, D)
+            self.W = L.Linear(D, vocab_a)
 
     def forward(self, x, q): # (x_nij, q_nj) -> ahat (unnormalized log prob)
         M = F.stack([F.stack([F.sum(self.embedid_a(xi), axis=0) for xi in xn]) for xn in x])
@@ -75,24 +88,40 @@ class E2EMN(chainer.Chain):
 
     def __call__(self, x, q, a):
         ahat = self.forward(x, q)
-        return F.softmax_cross_entropy(ahat, a)
+        return F.softmax_cross_entropy(ahat, a), ahat
 
-train_data = Corpus("tasks_1-20_v1-2/en-10k/qa1_single-supporting-fact_train.txt")
-test_data = Corpus("tasks_1-20_v1-2/en-10k/qa1_single-supporting-fact_test.txt")
-#print(len(train_data))
+corpus = CorpusLoader()
+dir = "tasks_1-20_v1-2/en/"
+target = "qa1_single-supporting-fact"
+#target = "qa9_simple-negation"
+train_data = corpus.load(dir+target+"_train.txt")
+test_data = corpus.load(dir+target+"_test.txt")
+print(len(train_data), len(corpus.vocab), len(corpus.vocab_a))
 
-model = E2EMN(len(train_data.vocab), 100)
+model = E2EMN(len(corpus.vocab), len(corpus.vocab_a), 150)
 optimizer = chainer.optimizers.Adam()
+#optimizer = chainer.optimizers.SGD(0.001)
 optimizer.setup(model)
 
-for epoch in range(10):
-    total_loss = 0
+t0 = time.time()
+for epoch in range(50):
+    train_loss = 0
+    train_correct = 0
     for x, q, a in train_data:
         model.cleargrads()
-        loss = model(x, q, a)
-        total_loss += loss.data
+        loss, ahat = model(x, q, a)
+        train_loss += loss.data
+        train_correct += (ahat.data.argmax(axis=1)==a).sum()
         loss.backward()
         optimizer.update()
 
-    print(epoch, total_loss / len(train_data))
+    test_loss = 0
+    test_correct = 0
+    with chainer.no_backprop_mode():
+        for x, q, a in test_data:
+            loss, ahat = model(x, q, a)
+            test_loss += loss.data
+            test_correct += (ahat.data.argmax(axis=1)==a).sum()
+
+    print(epoch, time.time()-t0, train_loss / len(train_data), train_correct / len(train_data), test_loss / len(test_data), test_correct / len(test_data))
 
