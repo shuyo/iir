@@ -68,27 +68,41 @@ class Corpus(object):
 # End-to-End Memory Network Model
 # simple implementation (suppose that each knowledge has the same number of sentences in a minibatch)
 class E2EMN(chainer.Chain):
-    def __init__(self, vocab_s, vocab_a, D):
+    def __init__(self, vocab_s, vocab_a, D, layer=1):
         super(E2EMN, self).__init__()
+        self.layer = layer
         with self.init_scope():
             self.embedid_a = L.EmbedID(vocab_s, D)
             self.embedid_b = L.EmbedID(vocab_s, D)
             self.embedid_c = L.EmbedID(vocab_s, D)
             self.W = L.Linear(D, vocab_a)
+            if layer>1:
+                self.H = L.Linear(D, D)
+            else:
+                self.H = lambda x:x
 
     def forward(self, x, q): # (x_nij, q_nj) -> ahat (unnormalized log prob)
         M = F.stack([F.stack([F.sum(self.embedid_a(xi), axis=0) for xi in xn]) for xn in x])
-        U = F.stack([F.sum(self.embedid_b(qj), axis=0) for qj in q])
         C = F.stack([F.stack([F.sum(self.embedid_c(xi), axis=0) for xi in xn]) for xn in x])
 
-        P = F.softmax(F.batch_matmul(M, U)[:, :, 0])
-        O = F.batch_matmul(F.swapaxes(C, 1, 2), P)[:, :, 0]
-
-        return self.W(O+U)
+        U = F.stack([F.sum(self.embedid_b(qj), axis=0) for qj in q])
+        for _ in range(self.layer):
+            P = F.softmax(F.batch_matmul(M, U)[:, :, 0])
+            O = F.batch_matmul(F.swapaxes(C, 1, 2), P)[:, :, 0]
+            U = self.H(U) + O
+        return self.W(U)
 
     def __call__(self, x, q, a):
         ahat = self.forward(x, q)
         return F.softmax_cross_entropy(ahat, a), ahat
+
+import argparse
+parser = argparse.ArgumentParser(description='End-to-End Memory Network')
+parser.add_argument('-l', '--layer', help='number of layers', type=int, default=1)
+parser.add_argument('-d', '--dim', help='dimension of hidden unit', type=int, default=100)
+parser.add_argument('-e', '--epoch', help='epoches', type=int, default=50)
+args = parser.parse_args()
+print(args)
 
 corpus = CorpusLoader()
 dir = "tasks_1-20_v1-2/en/"
@@ -98,13 +112,13 @@ train_data = corpus.load(dir+target+"_train.txt")
 test_data = corpus.load(dir+target+"_test.txt")
 print(len(train_data), len(corpus.vocab), len(corpus.vocab_a))
 
-model = E2EMN(len(corpus.vocab), len(corpus.vocab_a), 150)
+model = E2EMN(len(corpus.vocab), len(corpus.vocab_a), args.dim, args.layer)
 optimizer = chainer.optimizers.Adam()
 #optimizer = chainer.optimizers.SGD(0.001)
 optimizer.setup(model)
 
 t0 = time.time()
-for epoch in range(50):
+for epoch in range(args.epoch):
     train_loss = 0
     train_correct = 0
     for x, q, a in train_data:
