@@ -1,5 +1,12 @@
 #!/usr/bin/env python
 
+# Simple Implementation of End-to-End Memory Network on Python3/Chainer2
+
+# Sukhbaatar, Sainbayar, Jason Weston, and Rob Fergus. "End-to-end memory networks." Advances in neural information processing systems. 2015.
+
+# This code is available under the MIT License.
+# (c)2017 Nakatani Shuyo / Cybozu Labs Inc.
+
 import re, time
 import numpy
 import chainer
@@ -18,11 +25,11 @@ class Vocab(object):
     def __len__(self):
         return len(self.vocab)
 
-re_q = re.compile(r'\?\s(.+)\s(\d+)$')
 class CorpusLoader(object):
     def __init__(self):
         self.vocab = Vocab()
         self.vocab_a = Vocab()
+
     def load(self, *files):
         lines = []
         toid = lambda x: numpy.array([self.vocab[y] for y in x.split()])
@@ -31,14 +38,12 @@ class CorpusLoader(object):
             with open(path) as f:
                 for s in f:
                     s = re.sub(r'^\d+ ', '', s.strip().lower())
-                    s = re.sub(r'([\.\?,])', r' \1', s)
-                    m = re_q.search(s)
-                    s = re_q.sub('?', s)
+                    s = re.sub(r'([\.\?,])', r'', s)
+                    m = s.split("\t")
 
-                    if m:
-                        a = m.group(1)
-                        #strict_supervised = [int(x) for x in m.group(2).split()]
-                        lines.append((knowledge, toid(s), self.vocab_a[a.strip()])) # (x_nij, q_nj, a_n)
+                    if len(m)==3:
+                        #strict_supervised = [int(x) for x in m[2].split()]
+                        lines.append((knowledge, toid(m[0]), self.vocab_a[m[1]])) # (x_nij, q_nj, a_n)
                         knowledge = []
                     else:
                         knowledge.append(toid(s))
@@ -46,96 +51,101 @@ class CorpusLoader(object):
 
 class Corpus(object):
     def __init__(self, lines):
-        self._batchsize = 25
         self.lines = lines
 
-    @property
-    def batchsize(self): return self._batchsize
-    @batchsize.setter
-    def batchsize(self, bs): self._batchsize = bs
-
     def __iter__(self):
-        idx = numpy.random.permutation(len(self))
-        i = 0
-        while i<len(self):
-            js = idx[i:i+self._batchsize]
-            yield [self.lines[j][0] for j in js], [self.lines[j][1] for j in js], numpy.array([self.lines[j][2] for j in js])
-            i += self._batchsize
+        for x in self.lines:
+            yield x
 
     def __len__(self):
         return len(self.lines)
 
-# End-to-End Memory Network Model
-# simple implementation (suppose that each knowledge has the same number of sentences in a minibatch)
 class E2EMN(chainer.Chain):
-    def __init__(self, vocab_s, vocab_a, D, layer=1):
+    def __init__(self, vocab, vocab_ans, D, layer=1):
         super(E2EMN, self).__init__()
         self.layer = layer
         with self.init_scope():
-            self.embedid_a = L.EmbedID(vocab_s, D)
-            self.embedid_b = L.EmbedID(vocab_s, D)
-            self.embedid_c = L.EmbedID(vocab_s, D)
-            self.W = L.Linear(D, vocab_a)
-            if layer>1:
+            self.embedid_a = L.EmbedID(vocab, D)
+            self.embedid_b = L.EmbedID(vocab, D)
+            self.embedid_c = L.EmbedID(vocab, D)
+            self.W = L.Linear(D, vocab_ans)
+            if layer > 1:
                 self.H = L.Linear(D, D)
             else:
                 self.H = lambda x:x
+        self.clearhistories()
 
-    def forward(self, x, q): # (x_nij, q_nj) -> ahat (unnormalized log prob)
-        M = F.stack([F.stack([F.sum(self.embedid_a(xi), axis=0) for xi in xn]) for xn in x])
-        C = F.stack([F.stack([F.sum(self.embedid_c(xi), axis=0) for xi in xn]) for xn in x])
+    def clearhistories(self):
+        self.M = []
+        self.C = []
 
-        U = F.stack([F.sum(self.embedid_b(qj), axis=0) for qj in q])
+    def forward(self, x, q): # (x_ij, q_j) -> a^hat (unnormalized log prob)
+        self.M.extend(F.sum(self.embedid_a(xi), axis=0) for xi in x)
+        self.C.extend(F.sum(self.embedid_c(xi), axis=0) for xi in x)
+        M = F.stack(self.M)
+        C = F.stack(self.C)
+
+        U = F.sum(self.embedid_b(q), axis=0).reshape(1,-1)
         for _ in range(self.layer):
-            P = F.softmax(F.batch_matmul(M, U)[:, :, 0])
-            O = F.batch_matmul(F.swapaxes(C, 1, 2), P)[:, :, 0]
+            P = F.matmul(M,U[0])
+            O = F.matmul(F.transpose(P),C)
             U = self.H(U) + O
-        return self.W(U)
+        return self.W(U) # (1,D)
 
     def __call__(self, x, q, a):
         ahat = self.forward(x, q)
-        return F.softmax_cross_entropy(ahat, a), ahat
+        return F.softmax_cross_entropy(ahat, numpy.array([a])), ahat
 
-import argparse
-parser = argparse.ArgumentParser(description='End-to-End Memory Network')
-parser.add_argument('-l', '--layer', help='number of layers', type=int, default=1)
-parser.add_argument('-d', '--dim', help='dimension of hidden unit', type=int, default=100)
-parser.add_argument('-e', '--epoch', help='epoches', type=int, default=50)
-args = parser.parse_args()
-print(args)
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description='End-to-End Memory Network')
+    parser.add_argument('-l', '--layer', help='number of layers', type=int, default=1)
+    parser.add_argument('-d', '--dim', help='dimension of hidden unit', type=int, default=100)
+    parser.add_argument('-e', '--epoch', help='epoches', type=int, default=50)
+    parser.add_argument('-t', '--target', help='target data', default="tasks_1-20_v1-2/en/qa1_single-supporting-fact")
+    parser.add_argument('--adam', help='use Adam optimizer', action="store_true")
+    args = parser.parse_args()
+    print(args)
 
-corpus = CorpusLoader()
-dir = "tasks_1-20_v1-2/en/"
-target = "qa1_single-supporting-fact"
-#target = "qa9_simple-negation"
-train_data = corpus.load(dir+target+"_train.txt")
-test_data = corpus.load(dir+target+"_test.txt")
-print(len(train_data), len(corpus.vocab), len(corpus.vocab_a))
+    corpus = CorpusLoader()
+    train_data = corpus.load(args.target+"_train.txt")
+    test_data = corpus.load(args.target+"_test.txt")
+    print(len(train_data), len(corpus.vocab), len(corpus.vocab_a))
 
-model = E2EMN(len(corpus.vocab), len(corpus.vocab_a), args.dim, args.layer)
-optimizer = chainer.optimizers.Adam()
-#optimizer = chainer.optimizers.SGD(0.001)
-optimizer.setup(model)
+    model = E2EMN(len(corpus.vocab), len(corpus.vocab_a), args.dim, args.layer)
+    if args.adam:
+        optimizer = chainer.optimizers.Adam()
+    else:
+        optimizer = chainer.optimizers.SGD(0.001)
+    optimizer.setup(model)
 
-t0 = time.time()
-for epoch in range(args.epoch):
-    train_loss = 0
-    train_correct = 0
-    for x, q, a in train_data:
-        model.cleargrads()
-        loss, ahat = model(x, q, a)
-        train_loss += loss.data
-        train_correct += (ahat.data.argmax(axis=1)==a).sum()
-        loss.backward()
-        optimizer.update()
-
-    test_loss = 0
-    test_correct = 0
-    with chainer.no_backprop_mode():
-        for x, q, a in test_data:
+    t0 = time.time()
+    for epoch in range(args.epoch):
+        train_loss = 0
+        train_correct = 0
+        model.clearhistories()
+        n = 0
+        for x, q, a in train_data:
+            model.cleargrads()
             loss, ahat = model(x, q, a)
-            test_loss += loss.data
-            test_correct += (ahat.data.argmax(axis=1)==a).sum()
+            train_loss += loss.data
+            if ahat.data.argmax()==a: train_correct += 1
+            loss.backward()
+            optimizer.update()
+            n += 1
+            if n % 25 == 0: print(n, train_loss/n)
 
-    print(epoch, time.time()-t0, train_loss / len(train_data), train_correct / len(train_data), test_loss / len(test_data), test_correct / len(test_data))
+        test_loss = 0
+        test_correct = 0
+        model.clearhistories()
+        with chainer.no_backprop_mode():
+            for x, q, a in test_data:
+                loss, ahat = model(x, q, a)
+                test_loss += loss.data
+                if ahat.data.argmax()==a: test_correct += 1
+
+        print(epoch, time.time()-t0, train_loss / len(train_data), train_correct / len(train_data), test_loss / len(test_data), test_correct / len(test_data))
+
+if __name__=="__main__":
+    main()
 
