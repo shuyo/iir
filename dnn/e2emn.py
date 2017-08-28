@@ -5,7 +5,7 @@
 # Sukhbaatar, Sainbayar, Jason Weston, and Rob Fergus. "End-to-end memory networks." Advances in neural information processing systems. 2015.
 
 # This code is available under the MIT License.
-# (c)2017 Nakatani Shuyo / Cybozu Labs Inc.
+# (c)2017 Nakatani Shuyo, Cybozu Labs Inc.
 
 import re, time
 import numpy
@@ -33,6 +33,7 @@ class CorpusLoader(object):
     def load(self, *files):
         lines = []
         toid = lambda x: numpy.array([self.vocab[y] for y in x.split()], dtype=numpy.int32)
+        knowledge_size = 0
         for path in files:
             knowledge = []
             with open(path) as f:
@@ -44,25 +45,29 @@ class CorpusLoader(object):
                     if len(m)==3:
                         #strict_supervised = [int(x) for x in m[2].split()]
                         lines.append((knowledge, toid(m[0]), self.vocab_a[m[1]])) # (x_nij, q_nj, a_n)
-                        if len(lines)>=100: break
+                        knowledge_size += len(knowledge)
+                        #if len(lines)>=100: break
                         knowledge = []
                     else:
                         knowledge.append(toid(s))
-        return Corpus(lines)
+        return Corpus(lines, knowledge_size)
 
 class Corpus(object):
-    def __init__(self, lines):
+    def __init__(self, lines, knowledge_size):
         self.lines = lines
+        self.knowledge_size = knowledge_size
 
     def __iter__(self):
-        for x in self.lines:
-            yield x
+        xx = []
+        for x, q, a in self.lines:
+            xx.extend(x)
+            yield xx, q, a
 
     def __len__(self):
         return len(self.lines)
 
 class E2EMN(chainer.Chain):
-    def __init__(self, layer, D, vocab, vocab_ans, temporal_encoding_size=25):
+    def __init__(self, layer, D, vocab, vocab_ans, max_knowledge):
         super(E2EMN, self).__init__()
         self.layer = layer
         initializer = chainer.initializers.Normal(0.1)
@@ -71,20 +76,20 @@ class E2EMN(chainer.Chain):
             self.embedid_b = L.EmbedID(vocab, D, initialW=initializer)
             self.embedid_c = L.EmbedID(vocab, D, initialW=initializer)
             self.W = L.Linear(D, vocab_ans, initialW=initializer)
-            self.temporal_a = chainer.Parameter(initializer, (temporal_encoding_size, D))
+            self.temporal_a = chainer.Parameter(initializer, (max_knowledge, D))
+            self.temporal_c = chainer.Parameter(initializer, (max_knowledge, D))
             if layer > 1:
                 self.H = L.Linear(D, D, initialW=initializer)
-        self.clearhistories()
-
-    def clearhistories(self):
-        self.M = []
-        self.C = []
 
     def forward(self, x, q): # (x_ij, q_j) -> a^hat (unnormalized log prob)
-        self.M.extend(F.sum(self.embedid_a(xi), axis=0) for xi in x)
-        self.C.extend(F.sum(self.embedid_c(xi), axis=0) for xi in x)
-        M = F.stack(self.M)
-        C = F.stack(self.C)
+        max_knowledge, _ = self.temporal_a.shape
+        if len(x)>max_knowledge: x = x[len(x)-max_knowledge:]
+        M = F.stack([F.sum(self.embedid_a(xi), axis=0) for xi in x])
+        C = F.stack([F.sum(self.embedid_c(xi), axis=0) for xi in x])
+
+        j = max_knowledge-len(x)
+        M += self.temporal_a[j:]
+        C += self.temporal_c[j:]
 
         U = F.sum(self.embedid_b(q), axis=0).reshape(1,-1)
         for l in range(self.layer):
@@ -116,7 +121,7 @@ def main():
     test_data = corpus.load(args.target+"_test.txt")
     print(len(train_data), len(corpus.vocab), len(corpus.vocab_a))
 
-    model = E2EMN(args.layer, args.dim, len(corpus.vocab), len(corpus.vocab_a))
+    model = E2EMN(args.layer, args.dim, len(corpus.vocab), len(corpus.vocab_a), 100)
     if args.adam:
         optimizer = chainer.optimizers.Adam()
     else:
@@ -127,7 +132,6 @@ def main():
     for epoch in range(args.epoch):
         train_loss = 0
         train_correct = 0
-        model.clearhistories()
         n = 0
         for x, q, a in train_data:
             model.cleargrads()
@@ -137,11 +141,10 @@ def main():
             loss.backward()
             optimizer.update()
             n += 1
-            if n % 200 == 0: print(n, train_loss/n)
+            if n % 200 == 0: print(n, train_loss/n, train_correct/n)
 
         test_loss = 0
         test_correct = 0
-        model.clearhistories()
         with chainer.no_backprop_mode():
             for x, q, a in test_data:
                 loss, ahat = model(x, q, a)
