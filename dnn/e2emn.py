@@ -5,7 +5,7 @@
 # Sukhbaatar, Sainbayar, Jason Weston, and Rob Fergus. "End-to-end memory networks." Advances in neural information processing systems. 2015.
 
 # This code is available under the MIT License.
-# (c)2017 Nakatani Shuyo / Cybozu Labs Inc.
+# (c)2017 Nakatani Shuyo, Cybozu Labs Inc.
 
 import re, time
 import numpy
@@ -54,8 +54,10 @@ class Corpus(object):
         self.lines = lines
 
     def __iter__(self):
-        for x in self.lines:
-            yield x
+        xx = []
+        for x, q, a in self.lines:
+            xx.extend(x)
+            yield xx, q, a
 
     def __len__(self):
         return len(self.lines)
@@ -73,17 +75,10 @@ class E2EMN(chainer.Chain):
                 self.H = L.Linear(D, D)
             else:
                 self.H = lambda x:x
-        self.clearhistories()
-
-    def clearhistories(self):
-        self.M = []
-        self.C = []
 
     def forward(self, x, q): # (x_ij, q_j) -> a^hat (unnormalized log prob)
-        self.M.extend(F.sum(self.embedid_a(xi), axis=0) for xi in x)
-        self.C.extend(F.sum(self.embedid_c(xi), axis=0) for xi in x)
-        M = F.stack(self.M)
-        C = F.stack(self.C)
+        M = F.stack([F.sum(self.embedid_a(xi), axis=0) for xi in x])
+        C = F.stack([F.sum(self.embedid_c(xi), axis=0) for xi in x])
 
         U = F.sum(self.embedid_b(q), axis=0).reshape(1,-1)
         for _ in range(self.layer):
@@ -123,7 +118,6 @@ def main():
     for epoch in range(args.epoch):
         train_loss = 0
         train_correct = 0
-        model.clearhistories()
         n = 0
         for x, q, a in train_data:
             model.cleargrads()
@@ -133,11 +127,10 @@ def main():
             loss.backward()
             optimizer.update()
             n += 1
-            if n % 25 == 0: print(n, train_loss/n)
+            if n % 50 == 0: print(n, train_loss/n, train_correct/n)
 
         test_loss = 0
         test_correct = 0
-        model.clearhistories()
         with chainer.no_backprop_mode():
             for x, q, a in test_data:
                 loss, ahat = model(x, q, a)
