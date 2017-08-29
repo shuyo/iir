@@ -13,6 +13,8 @@ import chainer
 import chainer.functions as F
 import chainer.links as L
 
+toarray = numpy.array
+
 class Vocab(object):
     def __init__(self):
         self.vocab = []
@@ -30,9 +32,11 @@ class CorpusLoader(object):
         self.vocab = Vocab()
         self.vocab_a = Vocab()
 
-    def load(self, *files):
+    def load(self, *files, device=-1):
         lines = []
-        toid = lambda x: numpy.array([self.vocab[y] for y in x.split()], dtype=numpy.int32)
+        xp = chainer.cuda.cupy if device>=0 else numpy
+        toid = lambda x: xp.array([self.vocab[y] for y in x.split()], dtype=numpy.int32)
+        toa = lambda a: xp.array([self.vocab_a[a]], dtype=numpy.int32)
         knowledge_size = 0
         for path in files:
             knowledge = []
@@ -44,7 +48,7 @@ class CorpusLoader(object):
 
                     if len(m)==3:
                         #strict_supervised = [int(x) for x in m[2].split()]
-                        lines.append((knowledge, toid(m[0]), self.vocab_a[m[1]])) # (x_nij, q_nj, a_n)
+                        lines.append((knowledge, toid(m[0]), toa(m[1]))) # (x_nij, q_nj, a_n)
                         knowledge_size += len(knowledge)
                         #if len(lines)>=100: break
                         knowledge = []
@@ -103,7 +107,7 @@ class E2EMN(chainer.Chain):
 
     def __call__(self, x, q, a):
         ahat = self.forward(x, q)
-        return F.softmax_cross_entropy(ahat, numpy.array([a], dtype=numpy.int32)), ahat
+        return F.softmax_cross_entropy(ahat, a), ahat
 
 def main():
     import argparse
@@ -113,15 +117,19 @@ def main():
     parser.add_argument('-e', '--epoch', help='epoches', type=int, default=50)
     parser.add_argument('-t', '--target', help='target data', default="tasks_1-20_v1-2/en/qa1_single-supporting-fact")
     parser.add_argument('--adam', help='use Adam optimizer', action="store_true")
+    parser.add_argument("-g", "--gpu", default=-1, type=int, help="GPU ID (negative = CPU)")
     args = parser.parse_args()
     print(args)
 
     corpus = CorpusLoader()
-    train_data = corpus.load(args.target+"_train.txt")
-    test_data = corpus.load(args.target+"_test.txt")
+    train_data = corpus.load(args.target+"_train.txt", device=args.gpu)
+    test_data = corpus.load(args.target+"_test.txt", device=args.gpu)
     print(len(train_data), len(corpus.vocab), len(corpus.vocab_a))
 
     model = E2EMN(args.layer, args.dim, len(corpus.vocab), len(corpus.vocab_a), 100)
+    if args.gpu >= 0:
+        chainer.cuda.get_device(args.gpu).use()
+        model.to_gpu()
     if args.adam:
         optimizer = chainer.optimizers.Adam()
     else:
