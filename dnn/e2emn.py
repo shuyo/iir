@@ -33,13 +33,13 @@ class CorpusLoader(object):
         self.vocab_a = Vocab()
 
     def load(self, *files, device=-1):
-        lines = []
         xp = chainer.cuda.cupy if device>=0 else numpy
-        toid = lambda x: xp.array([self.vocab[y] for y in x.split()], dtype=numpy.int32)
-        toa = lambda a: xp.array([self.vocab_a[a]], dtype=numpy.int32)
-        knowledge_size = 0
+        toa = lambda a: xp.array(a, dtype=numpy.int32)
+        toid = lambda x: [self.vocab[y] for y in x.split()]
+
+        lines = []
+        knowledge = []
         for path in files:
-            knowledge = []
             with open(path) as f:
                 for s in f:
                     s = re.sub(r'^\d+ ', '', s.strip().lower())
@@ -48,27 +48,32 @@ class CorpusLoader(object):
 
                     if len(m)==3:
                         #strict_supervised = [int(x) for x in m[2].split()]
-                        lines.append((knowledge, toid(m[0]), toa(m[1]))) # (x_nij, q_nj, a_n)
-                        knowledge_size += len(knowledge)
+                        lines.append((len(knowledge), toid(m[0]), self.vocab_a[m[1]])) # (x_nij, q_nj, a_n)
                         #if len(lines)>=100: break
-                        knowledge = []
                     else:
                         knowledge.append(toid(s))
-        return Corpus(lines, knowledge_size)
+        D = len(self.vocab)
+        X = xp.zeros((len(knowledge), D), dtype=numpy.float32)
+        for i, x in enumerate(knowledge):
+            for z in x: X[i, z] += 1
+        Q = xp.zeros((len(lines), D), dtype=numpy.float32)
+        for i, x in enumerate(lines):
+            for z in x[1]: Q[i, z] += 1
+        return Corpus(X, Q, numpy.array([x[0] for x in lines]), xp.array([x[2] for x in lines], dtype=numpy.int32))
 
 class Corpus(object):
-    def __init__(self, lines, knowledge_size):
-        self.lines = lines
-        self.knowledge_size = knowledge_size
+    def __init__(self, x, q, k, a):
+        self.knowledge = x
+        self.query = q
+        self.kindex = k
+        self.answer = a
 
     def __iter__(self):
-        xx = []
-        for x, q, a in self.lines:
-            xx.extend(x)
-            yield xx, q, a
+        for i, k in enumerate(self.kindex):
+            yield self.knowledge[0:k], self.query[i], self.answer[i:i+1]
 
     def __len__(self):
-        return len(self.lines)
+        return self.answer.size
 
 class E2EMN(chainer.Chain):
     def __init__(self, layer, D, vocab, vocab_ans, max_knowledge):
@@ -76,9 +81,9 @@ class E2EMN(chainer.Chain):
         self.layer = layer
         initializer = chainer.initializers.Normal(0.1)
         with self.init_scope():
-            self.embedid_a = L.EmbedID(vocab, D, initialW=initializer)
-            self.embedid_b = L.EmbedID(vocab, D, initialW=initializer)
-            self.embedid_c = L.EmbedID(vocab, D, initialW=initializer)
+            self.embedid_a = chainer.Parameter(initializer, (vocab, D))
+            self.embedid_b = chainer.Parameter(initializer, (vocab, D))
+            self.embedid_c = chainer.Parameter(initializer, (vocab, D))
             self.W = L.Linear(D, vocab_ans, initialW=initializer)
             self.temporal_a = chainer.Parameter(initializer, (max_knowledge, D))
             self.temporal_c = chainer.Parameter(initializer, (max_knowledge, D))
@@ -88,14 +93,14 @@ class E2EMN(chainer.Chain):
     def forward(self, x, q): # (x_ij, q_j) -> a^hat (unnormalized log prob)
         max_knowledge, _ = self.temporal_a.shape
         if len(x)>max_knowledge: x = x[len(x)-max_knowledge:]
-        M = F.stack([F.sum(self.embedid_a(xi), axis=0) for xi in x])
-        C = F.stack([F.sum(self.embedid_c(xi), axis=0) for xi in x])
+        M = F.matmul(x, self.embedid_a)
+        C = F.matmul(x, self.embedid_c)
 
         j = max_knowledge-len(x)
         M += self.temporal_a[j:]
         C += self.temporal_c[j:]
 
-        U = F.sum(self.embedid_b(q), axis=0).reshape(1,-1)
+        U = F.matmul(q.reshape(1,-1), self.embedid_b)
         for l in range(self.layer):
             P = F.matmul(M,U[0])
             O = F.matmul(F.transpose(P),C)
@@ -140,7 +145,6 @@ def main():
     for epoch in range(args.epoch):
         train_loss = 0
         train_correct = 0
-        n = 0
         for x, q, a in train_data:
             model.cleargrads()
             loss, ahat = model(x, q, a)
@@ -148,8 +152,6 @@ def main():
             if ahat.data.argmax()==a: train_correct += 1
             loss.backward()
             optimizer.update()
-            n += 1
-            if n % 200 == 0: print(n, train_loss/n, train_correct/n)
 
         test_loss = 0
         test_correct = 0
