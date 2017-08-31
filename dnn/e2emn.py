@@ -90,16 +90,24 @@ class E2EMN(chainer.Chain):
             if layer > 1:
                 self.H = L.Linear(D, D, initialW=initializer)
 
-    def forward(self, x, q): # (x_ij, q_j) -> a^hat (unnormalized log prob)
+    # (x_ij, q_j) -> a^hat (unnormalized log probabilites)
+    def forward(self, x, q):
+        # Random Noise for Learing Time invariance
+        if chainer.configuration.config.train:
+            xp = chainer.cuda.get_array_module(x)
+            z = xp.zeros((1,x.shape[1]), dtype=numpy.float32)
+            i = 0
+            while i<x.shape[0]:
+                if numpy.random.rand(1)[0]<0.1:
+                    x = xp.vstack((x[:i], z, x[i:]))
+                    i += 1
+                i += 1
         max_knowledge, _ = self.temporal_a.shape
         if len(x)>max_knowledge: x = x[len(x)-max_knowledge:]
-        M = F.matmul(x, self.embedid_a)
-        C = F.matmul(x, self.embedid_c)
-
         j = max_knowledge-len(x)
-        M += self.temporal_a[j:]
-        C += self.temporal_c[j:]
 
+        M = F.matmul(x, self.embedid_a) + self.temporal_a[j:]
+        C = F.matmul(x, self.embedid_c) + self.temporal_c[j:]
         U = F.matmul(q.reshape(1,-1), self.embedid_b)
         for l in range(self.layer):
             P = F.matmul(M,U[0])
@@ -119,7 +127,7 @@ def main():
     parser = argparse.ArgumentParser(description='End-to-End Memory Network')
     parser.add_argument('-l', '--layer', help='number of layers', type=int, default=1)
     parser.add_argument('-d', '--dim', help='dimension of hidden unit', type=int, default=100)
-    parser.add_argument('-e', '--epoch', help='epoches', type=int, default=50)
+    parser.add_argument('-e', '--epoch', help='epoches', type=int, default=100)
     parser.add_argument('-t', '--target', help='target data', default="tasks_1-20_v1-2/en/qa1_single-supporting-fact")
     parser.add_argument('--adam', help='use Adam optimizer', action="store_true")
     parser.add_argument("-g", "--gpu", default=-1, type=int, help="GPU ID (negative = CPU)")
