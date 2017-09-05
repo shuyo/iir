@@ -41,14 +41,16 @@ class CorpusLoader(object):
         knowledge = []
         for path in files:
             with open(path) as f:
+                startid = 0
                 for s in f:
+                    if s.startswith("1 "): startid = len(knowledge)
                     s = re.sub(r'^\d+ ', '', s.strip().lower())
                     s = re.sub(r'([\.\?,])', r'', s)
                     m = s.split("\t")
 
                     if len(m)==3:
                         #strict_supervised = [int(x) for x in m[2].split()]
-                        lines.append((len(knowledge), toid(m[0]), self.vocab_a[m[1]])) # (x_nij, q_nj, a_n)
+                        lines.append(((startid, len(knowledge)), toid(m[0]), self.vocab_a[m[1]])) # (x_nij, q_nj, a_n)
                         #if len(lines)>=100: break
                     else:
                         knowledge.append(toid(s))
@@ -70,10 +72,14 @@ class Corpus(object):
 
     def __iter__(self):
         for i, k in enumerate(self.kindex):
-            yield self.knowledge[0:k], self.query[i], self.answer[i:i+1]
+            yield self.knowledge[k[0]:k[1]], self.query[i], self.answer[i:i+1]
 
     def __len__(self):
         return self.answer.size
+
+    @property
+    def ksize(self):
+        return self.knowledge.shape[0]
 
 class E2EMN(chainer.Chain):
     def __init__(self, layer, D, vocab, vocab_ans, max_knowledge):
@@ -137,7 +143,8 @@ def main():
     corpus = CorpusLoader()
     train_data = corpus.load(args.target+"_train.txt", device=args.gpu)
     test_data = corpus.load(args.target+"_test.txt", device=args.gpu)
-    print(len(train_data), len(corpus.vocab), len(corpus.vocab_a))
+    print("knowledge=%d, query=%d, vocab=%d, answer=%d" %
+        (train_data.ksize, len(train_data), len(corpus.vocab), len(corpus.vocab_a)))
 
     model = E2EMN(args.layer, args.dim, len(corpus.vocab), len(corpus.vocab_a), 100)
     if args.gpu >= 0:
@@ -169,7 +176,7 @@ def main():
                 test_loss += loss.data
                 if ahat.data.argmax()==a: test_correct += 1
 
-        print(epoch, time.time()-t0, train_loss / len(train_data), train_correct / len(train_data), test_loss / len(test_data), test_correct / len(test_data))
+        print("%d\t%.1f\t%.3f\t%f\t%.3f\t%f" % (epoch, time.time()-t0, train_loss / len(train_data), train_correct / len(train_data), test_loss / len(test_data), test_correct / len(test_data)))
 
 if __name__=="__main__":
     main()
