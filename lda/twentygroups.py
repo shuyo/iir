@@ -84,24 +84,27 @@ def main():
     parser.add_option("--beta", dest="beta", type="float", help="parameter beta", default=0.001)
     parser.add_option("-k", dest="K", type="int", help="number of topics", default=10)
     parser.add_option("-i", dest="iteration", type="int", help="iteration count", default=20)
+    parser.add_option("--seed", dest="seed", type="int", help="random seed", default=None)
     parser.add_option("--word_freq_threshold", dest="word_freq_threshold", type="int", default=3)
     parser.add_option("--docs_threshold_each_label", dest="docs_threshold_each_label", type="int", default=100)
     parser.add_option("-d", dest="dir", help="directory of 20-newsgroups dataset", default="./20groups/mini_newsgroups/")
     (options, args) = parser.parse_args()
+    import numpy
+    numpy.random.seed(options.seed)
 
     corpus = Loader(options.dir, options.word_freq_threshold, options.docs_threshold_each_label, True)
     V = len(corpus.vocabulary)
 
-    import lda
-    model = lda.LDA(options.K, options.alpha, options.beta, corpus.docs, V, True)
-    print "corpus=%d, words=%d, K=%d, a=%f, b=%f" % (len(corpus.docs), V, options.K, options.alpha, options.beta)
+    import lda_cvb0 as lda
+    model = lda.LDA_CVB0(options.K, options.alpha, options.beta, corpus.docs, V, True)
+    print("corpus=%d, words=%d, K=%d, a=%f, b=%f" % (len(corpus.docs), V, options.K, options.alpha, options.beta))
 
     pre_perp = model.perplexity()
-    print "initial perplexity=%f" % pre_perp
-    for i in xrange(options.iteration):
+    print("initial perplexity=%f" % pre_perp)
+    for i in range(options.iteration):
         model.inference()
         perp = model.perplexity()
-        print "-%d p=%f" % (i + 1, perp)
+        print("-%d p=%f" % (i + 1, perp))
     lda.output_word_topic_dist(model, corpus.vocabulary)
 
 if __name__ == "__main__":
