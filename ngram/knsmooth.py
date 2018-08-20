@@ -50,11 +50,11 @@ def maxlikelifood(gram1, gram2, gram3, text):
     w2 = w1 = ""
     for m in re_word.finditer(text):
         w = m.group(0)
-        print "\np(%s) = %d / %d = %.5f" % (w, gram1[(w,)], gram1.n, float(gram1[(w,)]) / gram1.n)
+        print("\np(%s) = %d / %d = %.5f" % (w, gram1[(w,)], gram1.n, float(gram1[(w,)]) / gram1.n))
         if gram1[(w1,)]>0:
-            print "p(%s | %s) = %d / %d = %.5f" % (w, w1, gram2[(w1, w)], gram1[(w1,)], float(gram2[(w1, w)]) / gram1[(w1,)])
+            print("p(%s | %s) = %d / %d = %.5f" % (w, w1, gram2[(w1, w)], gram1[(w1,)], float(gram2[(w1, w)]) / gram1[(w1,)]))
         if gram2[(w2, w1)]>0:
-            print "p(%s | %s %s) = %d / %d = %.5f" % (w, w2, w1, gram3[(w2, w1, w)], gram2[(w2, w1)], float(gram3[(w2, w1, w)]) / gram2[(w2, w1)])
+            print("p(%s | %s %s) = %d / %d = %.5f" % (w, w2, w1, gram3[(w2, w1, w)], gram2[(w2, w1)], float(gram3[(w2, w1, w)]) / gram2[(w2, w1)]))
         w2, w1 = w1, w
 
 def golden_section_search(func, min, max):
@@ -266,11 +266,11 @@ def main():
 
     random.seed(opt.seed)
 
-    m = __import__('nltk.corpus', globals(), locals(), [opt.corpus], -1)
+    m = __import__('nltk.corpus', globals(), locals(), [opt.corpus], 0)
     corpus = getattr(m, opt.corpus)
     ids = corpus.fileids()
     D = len(ids)
-    print "found corpus : %s (D=%d)" % (opt.corpus, D)
+    print("found corpus : %s (D=%d)" % (opt.corpus, D))
 
     testids = set(random.sample(ids, int(D * opt.testrate)))
     trainids = [id for id in ids if id not in testids]
@@ -278,22 +278,22 @@ def main():
 
     freq1 = nltk.FreqDist(trainwords)
     gram1 = Distribution()
-    for w, c in freq1.iteritems():
+    for w, c in freq1.items():
         gram1[(w,)] = c
-    print "# of terms=%d, vocabulary size=%d" % (gram1.n, len(gram1))
+    print("# of terms=%d, vocabulary size=%d" % (gram1.n, len(gram1)))
 
     gram2 = Distribution()
-    for w, c in nltk.FreqDist(nltk.bigrams(trainwords)).iteritems():
+    for w, c in nltk.FreqDist(nltk.bigrams(trainwords)).items():
         gram2[w] = c
     gram3 = Distribution()
-    for w, c in nltk.FreqDist(nltk.trigrams(trainwords)).iteritems():
+    for w, c in nltk.FreqDist(nltk.trigrams(trainwords)).items():
         gram3[w] = c
 
     #maxlikelifood(gram1, gram2, gram3, "this is a pen")
     #maxlikelifood(gram1, gram2, gram3, "the associated press microsoft looking at making its own smartphone?")
 
     testset = []
-    voca = set(freq1.iterkeys())
+    voca = set(freq1.keys())
     for id in testids:
         f = corpus.words(id)
         doc = [w.lower() for w in f]
@@ -308,29 +308,29 @@ def main():
     D2 = gram2.n1 / float(gram2.n1 + 2 * gram2.n2)
     D3 = gram3.n1 / float(gram3.n1 + 2 * gram3.n2)
 
-    print "\nUNIGRAM:"
+    print("\nUNIGRAM:")
     alpha1, minppl = golden_section_search(lambda a:unigram_perplexity(gram1, testset, V, a), 0.0001, 1.0)
-    print "additive smoother: alpha1=%.4f, perplexity=%.3f" % (alpha1, minppl)
-    print "Kneser-Ney: heuristic D=%.3f, perplexity=%.3f" % (D1, kn1_perplexity(gram1, testset, V, D1))
+    print("additive smoother: alpha1=%.4f, perplexity=%.3f" % (alpha1, minppl))
+    print("Kneser-Ney: heuristic D=%.3f, perplexity=%.3f" % (D1, kn1_perplexity(gram1, testset, V, D1)))
     D1min, minppl = golden_section_search(lambda d:kn1_perplexity(gram1, testset, V, d), 0.0001, 0.9999)
-    print "Kneser-Ney: minimum D=%.3f, perplexity=%.3f" % (D1min, minppl)
-    print "modified Kneser-Ney: perplexity=%.3f" % mkn1_perplexity(gram1, testset, V)
+    print("Kneser-Ney: minimum D=%.3f, perplexity=%.3f" % (D1min, minppl))
+    print("modified Kneser-Ney: perplexity=%.3f" % mkn1_perplexity(gram1, testset, V))
 
-    print "\nBIGRAM:"
+    print("\nBIGRAM:")
     alpha2, minppl = golden_section_search(lambda a:bigram_perplexity(gram1, gram2, testset, V, alpha1, a), 0.0001, 1.0)
-    print "additive smoother: alpha2=%.4f, perplexity=%.3f" % (alpha2, minppl)
-    print "Kneser-Ney: heuristic D=%.3f, perplexity=%.3f" % (D2, kn2_perplexity(gram1, gram2, testset, V, D1, D2))
+    print("additive smoother: alpha2=%.4f, perplexity=%.3f" % (alpha2, minppl))
+    print("Kneser-Ney: heuristic D=%.3f, perplexity=%.3f" % (D2, kn2_perplexity(gram1, gram2, testset, V, D1, D2)))
     D2min, minppl = golden_section_search(lambda a:kn2_perplexity(gram1, gram2, testset, V, D1, a), 0.0001, 0.9999)
-    print "Kneser-Ney: minimum D=%.3f, perplexity=%.3f" % (D2min, minppl)
-    print "modified Kneser-Ney: perplexity=%.3f" % mkn2_perplexity(gram1, gram2, testset, V)
+    print("Kneser-Ney: minimum D=%.3f, perplexity=%.3f" % (D2min, minppl))
+    print("modified Kneser-Ney: perplexity=%.3f" % mkn2_perplexity(gram1, gram2, testset, V))
 
-    print "\nTRIGRAM:"
+    print("\nTRIGRAM:")
     alpha3, minppl = golden_section_search(lambda a:trigram_perplexity(gram1, gram2, gram3, testset, V, alpha1, alpha2, a), 0.0001, 1.0)
-    print "additive smoother: alpha3=%.4f, perplexity=%.3f" % (alpha3, minppl)
-    print "Kneser-Ney: heuristic D=%.3f, perplexity=%.3f" % (D3, kn3_perplexity(gram1, gram2, gram3, testset, V, D1, D2, D3))
+    print("additive smoother: alpha3=%.4f, perplexity=%.3f" % (alpha3, minppl))
+    print("Kneser-Ney: heuristic D=%.3f, perplexity=%.3f" % (D3, kn3_perplexity(gram1, gram2, gram3, testset, V, D1, D2, D3)))
     D3min, minppl = golden_section_search(lambda a:kn3_perplexity(gram1, gram2, gram3, testset, V, D1, D2, a), 0.0001, 0.9999)
-    print "Kneser-Ney: minimum D=%.3f, perplexity=%.3f" % (D3min, minppl)
-    print "modified Kneser-Ney: perplexity=%.3f" % mkn3_perplexity(gram1, gram2, gram3, testset, V)
+    print("Kneser-Ney: minimum D=%.3f, perplexity=%.3f" % (D3min, minppl))
+    print("modified Kneser-Ney: perplexity=%.3f" % mkn3_perplexity(gram1, gram2, gram3, testset, V))
 
 if __name__ == "__main__":
     main()
